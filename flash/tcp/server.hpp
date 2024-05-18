@@ -164,7 +164,6 @@ public:
             if (id == ignoreClient) continue;
 
             if (client && client->IsConnected()) {
-                std::cout << "Sending message to client " << id << " with contents " << msg << '\n';
                 message<T> msgCopy = msg;
                 client->Send(std::move(msgCopy));
                 
@@ -176,6 +175,9 @@ public:
 
         for (auto id : disconnectedClients) {
             m_activeConnections.erase(id);
+        }
+
+        for (auto id : disconnectedClients) {
             OnClientDisconnect(id);
         }
     }
