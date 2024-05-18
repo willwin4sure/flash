@@ -92,7 +92,7 @@ public:
                     std::cout << "[SERVER] New Connection from IP: " << socket.remote_endpoint() << '\n';
 
                     // Make a new connection.
-                    std::shared_ptr<connection<T>> new_connection = std::make_shared<connection<T>>(
+                    std::unique_ptr<connection<T>> new_connection = std::make_unique<connection<T>>(
                         connection<T>::owner::server,
                         m_asioContext,     // Provide the connection with the surrounding asio context.
                         std::move(socket), // Move the new socket into the connection.
@@ -100,14 +100,17 @@ public:
                     );
 
                     // Give the user a chance to deny connection by overriding OnClientConnect.
-                    if (OnClientConnect(new_connection)) {
+                    if (OnClientConnect(new_connection->GetSocket())) {
+                        // Assign a unique ID to this connection.
+                        UserId newId = m_uidCounter++;
+
                         // Transfer ownership of the new connection to the server.
-                        m_activeConnections.push_back(std::move(new_connection));
+                        m_activeConnections.emplace(newId, std::move(new_connection));
 
-                        // Tell the connection to connect to the client and assign them a unique ID.
-                        m_activeConnections.back()->ConnectToClient(m_uidCounter++);
+                        // Tell the connection to connect to the client.
+                        m_activeConnections.at(newId)->ConnectToClient(newId);
 
-                        std::cout << "[" << m_activeConnections.back()->GetId() << "] Connection Approved\n";
+                        std::cout << "[" << newId << "] Connection Approved\n";
 
                     } else {
                         std::cout << "[------] Connection Denied\n";
@@ -131,17 +134,18 @@ public:
      * @note that this is the only way we can tell if a client has disconnected,
      * as we don't receive an explicit notification of such a fact.
     */
-    void MessageClient(std::shared_ptr<connection<T>> client, const message<T>& msg) {
-        if (client && client->IsConnected()) {
-            client->Send(msg);
+    void MessageClient(UserId clientId, message<T>&& msg) {
+        // Find the client in the active connections.
+        auto client = m_activeConnections.find(clientId);
+        
+        // If the client is found and connected, send a message
+        if (client != m_activeConnections.end() && client->second && client->second->IsConnected()) {
+            client->second->Send(std::move(msg));
 
         } else {
             // If the client socket is no longer valid, assume that the client has disconnected.
-            OnClientDisconnect(client);
-            client.reset();
-            m_activeConnections.erase(
-                std::remove(m_activeConnections.begin(), m_activeConnections.end(), client), m_activeConnections.end()
-            );
+            m_activeConnections.erase(client);
+            OnClientDisconnect(clientId);
         }
     }
 
@@ -150,27 +154,18 @@ public:
      * 
      * If any client is not connected, they are removed from the server's active connections.
     */
-    void MessageAllClients(const message<T>& msg, std::shared_ptr<connection<T>> ignoreClient = nullptr) {
-        bool bInvalidClientExists = false;  // Whether at least one client has disconnected.
+    void MessageAllClients(const message<T>& msg, UserId ignoreClient = -1) {
+        for (auto [id, client] : m_activeConnections) {
+            if (id == ignoreClient) continue;
 
-        for (auto& client : m_activeConnections) {
             if (client && client->IsConnected()) {
-                if (client != ignoreClient) {
-                    client->Send(msg);
-                }
-
+                client->Send(msg);
+                
             } else {
                 // If the client socket is no longer valid, assume that the client has disconnected.
-                OnClientDisconnect(client);
-                client.reset();
-                bInvalidClientExists = true;
+                m_activeConnections.erase(id);
+                OnClientDisconnect(id);
             }
-        }
-
-        if (bInvalidClientExists) {
-            m_activeConnections.erase(
-                std::remove(m_activeConnections.begin(), m_activeConnections.end(), nullptr), m_activeConnections.end()
-            );
         }
     }
 
@@ -182,9 +177,9 @@ public:
     void Update(size_t maxMessages = -1) {
         size_t messageCount = 0;
         while (messageCount < maxMessages && !m_qMessagesin.empty()) {
-            auto msg = m_qMessagesin.pop_front();
+            auto tagged_msg = m_qMessagesin.pop_front();
 
-            OnMessage(msg.m_remote, msg.m_msg);
+            OnMessage(tagged_msg.m_remote, std::move(tagged_msg.m_msg));
         }
     }
 
@@ -195,25 +190,25 @@ protected:
      * 
      * Must be overridden by derived class to accept any connections.
     */
-    virtual bool OnClientConnect(std::shared_ptr<connection<T>> client) = 0;
+    virtual bool OnClientConnect(const boost::asio::ip::tcp::socket& socket) = 0;
 
     /**
      * Called when a client appears to have disconnected.
      * Can be used to remove the user from the game state.
     */
-    virtual void OnClientDisconnect(std::shared_ptr<connection<T>> client) = 0;
+    virtual void OnClientDisconnect(UserId clientId) = 0;
 
     /**
      * Called when a message is received from a client,
      * after we call Update to process from the queue.
     */
-    virtual void OnMessage(std::shared_ptr<connection<T>> client, message<T>& msg) = 0;
+    virtual void OnMessage(UserId clientId, message<T>&& msg) = 0;
 
     /// Thread-safe deque for incoming message packets; we own it.
     ts_deque<tagged_message<T>> m_qMessagesin;
 
     /// Container of active validated connections.
-    std::deque<std::shared_ptr<connection<T>>> m_activeConnections;
+    std::unordered_map<UserId, std::unique_ptr<connection<T>>> m_activeConnections;
 
     /// The asio context for the server.
     boost::asio::io_context m_asioContext;
@@ -225,7 +220,7 @@ protected:
     boost::asio::ip::tcp::acceptor m_asioAcceptor;
 
     /// Clients are identified via a numeric ID, which is must simpler.
-    ClientId m_uidCounter = 100000;
+    UserId m_uidCounter = 100000;
 };
 
 } // namespace flash

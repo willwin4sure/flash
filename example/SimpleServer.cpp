@@ -13,23 +13,22 @@ public:
     }
 
 protected:
-    bool OnClientConnect(std::shared_ptr<flash::connection<CustomMsgTypes>> client) override {
-        // flash::message<CustomMsgTypes> msg { CustomMsgTypes::ServerAccept };
-        // client->Send(std::move(msg));
+    bool OnClientConnect(const boost::asio::ip::tcp::socket& socket) override {
         return true;
     }
 
-    void OnClientDisconnect(std::shared_ptr<flash::connection<CustomMsgTypes>> client) override {
+    void OnClientDisconnect(flash::UserId clientId) override {
 
     }
 
-    void OnMessage(std::shared_ptr<flash::connection<CustomMsgTypes>> client, flash::message<CustomMsgTypes>& msg) override {
+    void OnMessage(flash::UserId clientId, flash::message<CustomMsgTypes>&& msg) override {
         switch (msg.m_header.m_type) {
         case CustomMsgTypes::ServerPing:
         {
-            std::cout << "[" << client->GetId() << "] Server Ping\n";
+            std::cout << "[" << clientId << "] Server Ping\n";
 
-            client->Send(std::move(msg));
+            // Simply bounce the message back to the client.
+            MessageClient(clientId, std::move(msg));
         }
         break;
         }

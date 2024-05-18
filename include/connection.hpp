@@ -18,21 +18,14 @@
 
 namespace flash {
 
-using ClientId = uint32_t;
-
 /**
  * Connection class that represents a connection between a client and a server,
  * owned by one of the sides.
  * 
  * @tparam T an enum class containing possible types of messages to be sent.
- *
- * @note that we subclass on std::enable_shared_from_this to allow any shared pointer
- * to this connection to generate another shared pointer for the connection.
- * This is because messages received from the clients at the server are tagged
- * with the connection that they came from.
 */
 template <typename T>
-class connection : public std::enable_shared_from_this<connection<T>> {
+class connection {
 public:
 
     /**
@@ -46,22 +39,27 @@ public:
     /**
      * Constructor for the connection. Sets up the connection with the given parameters.
      * 
-     * @param parent the owner of the connection.
+     * @param ownerType the owner of the connection.
      * @param asioContext a reference to the asio context that the connection will run on.
      * @param socket the socket that the connection will use.
      * @param qMessagesIn a reference to the queue to deposit incoming messages into.
     */
-    connection(owner parent, boost::asio::io_context& asioContext, boost::asio::ip::tcp::socket&& socket, ts_deque<tagged_message<T>>& qMessagesIn)
-        : m_ownerType { parent }, m_asioContext { asioContext }, m_socket { std::move(socket) }, m_qMessagesIn { qMessagesIn } { }
+    connection(owner ownerType, boost::asio::io_context& asioContext, boost::asio::ip::tcp::socket&& socket, ts_deque<tagged_message<T>>& qMessagesIn)
+        : m_ownerType { ownerType }, m_asioContext { asioContext }, m_socket { std::move(socket) }, m_qMessagesIn { qMessagesIn } { }
 
     virtual ~connection() { }
 
     /**
-     * @returns The ID of the connection.
-     * This should be 0 if the owner is a client,
-     * and the ID of the client is the owner is a server.
+     * @returns The ID of the other side of the connection.
+     * This should be 0 if the owner is a client (since it is a connection to the server)
+     * and the ID of the client is the owner is a server (since it is the connection to some client)
     */
-    ClientId GetId() const { return m_id; }
+    UserId GetId() const { return m_id; }
+
+    /**
+     * @returns The socket that the connection is using.
+    */
+    const boost::asio::ip::tcp::socket& GetSocket() { return m_socket; }
 
     /**
      * Turns the connection on by connecting it to a client,
@@ -72,7 +70,7 @@ public:
      * 
      * @param uid the ID of the client to connect to.
     */
-    void ConnectToClient(ClientId uid = 0) {
+    void ConnectToClient(UserId uid = 0) {
         // Only the server should connect to clients.
         if (m_ownerType != owner::server) return;
 
@@ -94,6 +92,8 @@ public:
     void ConnectToServer(const boost::asio::ip::tcp::resolver::results_type& endpoints) {
         // Only the client should connect to servers.
         if (m_ownerType != owner::client) return;
+
+        m_id = 0;
 
         boost::asio::async_connect(m_socket, endpoints,
             [this](std::error_code ec, boost::asio::ip::tcp::endpoint endpoint) {
@@ -150,8 +150,8 @@ protected:
     /// Type of the connection owner.
     owner m_ownerType { owner::server };
 
-    /// Identifier of the client connection.
-    ClientId m_id { 0 };
+    /// Identifier of the connection, initialized to max value and set when connected.
+    UserId m_id { static_cast<uint32_t>(-1) };
 
     /// Each connection has a unique socket that is connected to a remote; we own it.
     boost::asio::ip::tcp::socket m_socket;
@@ -274,13 +274,7 @@ private:
      * Asynchronous task for the asio context to add a message to the incoming message queue.
     */
     void AddToIncomingMessageQueue() {
-        if (m_ownerType == owner::server) {
-            // Server needs to tag the message with the client that sent it.
-            m_qMessagesIn.push_back(tagged_message<T>{ this->shared_from_this(), m_msgTemporaryIn });
-        } else {
-            // Clients can only talk to server so no need to tag.
-            m_qMessagesIn.push_back(tagged_message<T>{ nullptr, m_msgTemporaryIn });
-        }
+        m_qMessagesIn.push_back(tagged_message<T>{ GetId(), m_msgTemporaryIn });
 
         // Need to keep the asio context busy.
         ReadHeader();

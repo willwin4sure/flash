@@ -15,6 +15,9 @@
 
 namespace flash {
 
+/// Type of the user ID. Id 0 to represent the server, -1 to represent invalid.
+using UserId = uint32_t;
+
 // Forward declaration.
 template <typename T>
 class connection;
@@ -144,26 +147,27 @@ struct message {
 
 
 /**
- * Wrapper around a message that contains the connection it came from.
+ * Wrapper around a message that contains the client ID of the sender,
+ * or 0 if the sender is the server.
  * 
- * @tparam T the type of the message id. Should be an enum class
- *         with underlying type of uint32_t.
+ * @tparam T an enum class containing possible types of messages to be sent.
 */
 template <typename T>
 struct tagged_message {
     /**
-     * Constructs a tagged message with the given message and connection.
+     * Constructs a tagged message with the given message and sender ID.
     */
-    tagged_message(std::shared_ptr<connection<T>> remote, message<T>& msg)
+    tagged_message(UserId remote, message<T>& msg)
         : m_remote { remote }, m_msg { msg } { }
 
     friend std::ostream& operator<<(std::ostream& os, const tagged_message<T>& tagged_msg) {
-        os << tagged_msg.m_msg;  // TODO: add representation of the Connection.
+        os << "Remote: " << tagged_msg.m_remote << " "
+           << "Message: " << tagged_msg.m_msg;
         return os;
     }
 
-    /// Connection associated with the sender of the message.
-    std::shared_ptr<connection<T>> m_remote = nullptr;
+    /// Id of the remote user, 0 for server and non-zero for clients.
+    UserId m_remote { 0 };
 
     /// The actual message.
     message<T> m_msg;
