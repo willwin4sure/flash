@@ -31,6 +31,8 @@ namespace flash {
         ts_deque<message<T>> m_qMessagesOut;
 
         /// Queue holding messages received from the remote side, owned by the client or server.
+        /// This design choice is so that all incoming messages are serialized; this is also
+        /// why we have to tag the messages with the connection they came from.
         ts_deque<tagged_message<T>>& m_qMessagesIn;
     };
 }
