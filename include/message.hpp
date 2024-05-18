@@ -77,6 +77,12 @@ public:
      * Operates like a stack, pushing data to the end of the message body.
      * 
      * Can be chained together, e.g. `msg << data1 << data2 << data3;`.
+     * 
+     * @tparam U the type of the data being pushed.
+     * 
+     * @warning Doesn't handle endianness, so may not work across different architectures.
+     * If you care about this, then serialize the data yourself before pushing it;
+     * one option is to just use string representations of the data.
     */
     template <typename U>
     friend Message<T>& operator<<(Message<T>& msg, const U& data) {
@@ -100,6 +106,10 @@ public:
      * Operates like a stack, popping data from the end of the message body.
      * 
      * Can be chained together, e.g. `msg >> data3 >> data2 >> data1;`.
+     * 
+     * @tparam U the type of the data being popped.
+     * 
+     * @warning Doesn't handle endianness, so may not work across different architectures.
     */
     template <typename U>
     friend Message<T>& operator>>(Message<T>& msg, U& data) {
