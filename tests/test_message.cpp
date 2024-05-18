@@ -10,7 +10,7 @@ TEST_CASE( "Message handles integers correctly in stack order with right sizes",
         KId1
     };
 
-    flash::Message<MessageId> msg { MessageId::KId0 };
+    flash::message<MessageId> msg { MessageId::KId0 };
 
     msg << 1;
     msg << 2;
@@ -30,7 +30,7 @@ TEST_CASE( "Messages handles floats, strings, structs, and arrays" , "[message]"
         KId1
     };
 
-    flash::Message<MessageId> msg { MessageId::KId0 };
+    flash::message<MessageId> msg { MessageId::KId0 };
 
     struct TestStruct {
         int a;

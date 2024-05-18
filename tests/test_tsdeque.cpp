@@ -6,7 +6,7 @@
 #include <iostream>
 
 TEST_CASE( "Deque supports correct pushing and popping at back", "[ts_deque]" ) {
-    flash::TsDeque<int> deque {};
+    flash::ts_deque<int> deque {};
 
     REQUIRE( deque.empty() == true );
 
@@ -33,7 +33,7 @@ TEST_CASE( "Deque supports correct pushing and popping at back", "[ts_deque]" ) 
 }
 
 TEST_CASE( "Deque supports correct pushing and popping at front", "[ts_deque]" ) {
-    flash::TsDeque<int> deque {};
+    flash::ts_deque<int> deque {};
 
     REQUIRE( deque.empty() == true );
 
@@ -53,9 +53,9 @@ TEST_CASE( "Deque supports messages", "[ts_deque]" ) {
         KId1
     };
 
-    flash::TsDeque<flash::Message<MessageId>> deque {};
+    flash::ts_deque<flash::message<MessageId>> deque {};
 
-    flash::Message<MessageId> msg { MessageId::KId0 };
+    flash::message<MessageId> msg { MessageId::KId0 };
     msg << 1.0 << 2.0;
 
     deque.push_back(std::move(msg));
@@ -63,7 +63,7 @@ TEST_CASE( "Deque supports messages", "[ts_deque]" ) {
     REQUIRE( deque.size() == 1 );
     REQUIRE( deque.front().size() == 8 + 2 * sizeof(double) );
 
-    flash::Message<MessageId> msg2 { MessageId::KId1 };
+    flash::message<MessageId> msg2 { MessageId::KId1 };
     msg2 << 3.0 << 4.0 << 5.0;
 
     deque.push_back(std::move(msg2));
@@ -71,7 +71,7 @@ TEST_CASE( "Deque supports messages", "[ts_deque]" ) {
     REQUIRE( deque.size() == 2 );
     REQUIRE( deque.back().size() == 8 + 3 * sizeof(double) );
 
-    flash::Message<MessageId> msg3 = deque.pop_front();
+    flash::message<MessageId> msg3 = deque.pop_front();
 
     REQUIRE( msg3.size() == 8 + 2 * sizeof(double) );
 

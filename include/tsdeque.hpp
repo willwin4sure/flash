@@ -17,15 +17,15 @@ namespace flash {
  * Thread-safe double-ended queue for storing arbitrary data.
 */
 template <typename T>
-class TsDeque {
+class ts_deque {
 public:
-    TsDeque() = default;
+    ts_deque() = default;
 
 
     // Don't want to be able to copy the mutex.
 
-    TsDeque(const TsDeque<T>&) = delete;
-    TsDeque& operator=(const TsDeque<T>&) = delete;
+    ts_deque(const ts_deque<T>&) = delete;
+    ts_deque& operator=(const ts_deque<T>&) = delete;
 
 
     /**
