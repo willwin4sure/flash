@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.27)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 include(CTest)
 include(FetchContent)
 
@@ -11,10 +14,14 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(Catch2)
 
-# Add test executable
-add_executable(tests tests.cpp)
-target_link_libraries(tests PRIVATE Catch2::Catch2WithMain)
+# Add test executables
+add_executable(test_message test_message.cpp)
+add_executable(test_tsdeque test_tsdeque.cpp)
 
-# Add test
+target_link_libraries(test_message PRIVATE Catch2::Catch2WithMain)
+target_link_libraries(test_tsdeque PRIVATE Catch2::Catch2WithMain)
+
+# Add tests to CTest
 enable_testing()
-add_test(NAME tests COMMAND tests)
+add_test(NAME test_message COMMAND test_message)
+add_test(NAME test_tsdeque COMMAND test_tsdeque)
