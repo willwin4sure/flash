@@ -82,7 +82,7 @@ public:
 
                     // Give the user a chance to deny connection by overriding OnClientConnect.
                     if (OnClientConnect(new_connection)) {
-                        
+                        // Transfer ownership of the new connection to the server.
                         m_activeConnections.push_back(std::move(new_connection));
 
                         // Tell the connection to connect to the client and assign them a unique ID.
@@ -176,30 +176,24 @@ protected:
      * 
      * Must be overridden by derived class to accept any connections.
     */
-    virtual bool OnClientConnect(std::shared_ptr<connection<T>> client) {
-        return false;
-    }
+    virtual bool OnClientConnect(std::shared_ptr<connection<T>> client) { return false; }
 
     /**
      * Called when a client appears to have disconnected.
      * Can be used to remove the user from the game state.
     */
-    virtual void OnClientDisconnect(std::shared_ptr<connection<T>> client) {
-
-    }
+    virtual void OnClientDisconnect(std::shared_ptr<connection<T>> client) { }
 
     /**
      * Called when a message is received from a client,
      * after we call Update to process from the queue.
     */
-    virtual void OnMessage(std::shared_ptr<connection<T>> client, message<T>& msg) {
-
-    }
+    virtual void OnMessage(std::shared_ptr<connection<T>> client, message<T>& msg) { }
 
     /// Thread-safe deque for incoming message packets; we own it.
     ts_deque<tagged_message<T>> m_qMessagesin;
 
-    /// Container of active validated connections
+    /// Container of active validated connections.
     std::deque<std::shared_ptr<connection<T>>> m_activeConnections;
 
     /// The asio context for the server.
@@ -212,7 +206,7 @@ protected:
     boost::asio::ip::tcp::acceptor m_asioAcceptor;
 
     /// Clients are identified via a numeric ID, which is must simpler.
-    uint32_t m_uidCounter = 10000;
+    uint32_t m_uidCounter = 100000;
 };
 
 } // namespace flash

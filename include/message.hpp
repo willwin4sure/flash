@@ -162,6 +162,8 @@ private:
 
     /// The actual message.
     message<T> m_msg;
+
+    friend class connection<T>;
 };
 
 } // namespace flash
