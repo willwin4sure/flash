@@ -17,11 +17,14 @@ FetchContent_MakeAvailable(Catch2)
 # Add test executables
 add_executable(test_message test_message.cpp)
 add_executable(test_tsdeque test_tsdeque.cpp)
+add_executable(test_connection test_connection.cpp)
 
 target_link_libraries(test_message PRIVATE Catch2::Catch2WithMain)
 target_link_libraries(test_tsdeque PRIVATE Catch2::Catch2WithMain)
+target_link_libraries(test_connection PRIVATE Catch2::Catch2WithMain)
 
 # Add tests to CTest
 enable_testing()
 add_test(NAME test_message COMMAND test_message)
 add_test(NAME test_tsdeque COMMAND test_tsdeque)
+add_test(NAME test_connection COMMAND test_connection)

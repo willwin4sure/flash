@@ -2,39 +2,42 @@
 #define CONNECTION_HPP
 
 #include "message.hpp"
+#include "tsdeque.hpp"
 
 #include <boost/asio.hpp>
 
 #include <memory>
 
 namespace flash {
-    template <typename T>
-    class connection : public std::enable_shared_from_this<connection<T>> {
-    public:
-        connection() {}
-        virtual ~connection() {}
 
-        bool ConnectToServer();
-        bool Disconnect();
-        bool IsConnected() const;
+template <typename T>
+class connection : public std::enable_shared_from_this<connection<T>> {
+public:
+    connection() {}
+    virtual ~connection() {}
 
-        bool Send(const message<T>& msg);
+    bool ConnectToServer();
+    bool Disconnect();
+    bool IsConnected() const;
 
-    protected:
-        /// Each connection has a unique socket that is connected to a remote; we own it.
-        boost::asio::ip::tcp::socket m_socket;
+    bool Send(const message<T>& msg);
 
-        /// The asio context is shared with all other connections.
-        boost::asio::io_context& m_asioContext;
+protected:
+    /// Each connection has a unique socket that is connected to a remote; we own it.
+    boost::asio::ip::tcp::socket m_socket;
 
-        /// Queue holding messages to be sent to the remote; we own it.
-        ts_deque<message<T>> m_qMessagesOut;
+    /// The asio context is shared with all other connections.
+    boost::asio::io_context& m_asioContext;
 
-        /// Queue holding messages received from the remote side, owned by the client or server.
-        /// This design choice is so that all incoming messages are serialized; this is also
-        /// why we have to tag the messages with the connection they came from.
-        ts_deque<tagged_message<T>>& m_qMessagesIn;
-    };
-}
+    /// Queue holding messages to be sent to the remote; we own it.
+    ts_deque<message<T>> m_qMessagesOut;
+
+    /// Queue holding messages received from the remote side, owned by the client or server.
+    /// This design choice is so that all incoming messages are serialized; this is also
+    /// why we have to tag the messages with the connection they came from.
+    ts_deque<tagged_message<T>>& m_qMessagesIn;
+};
+
+} // namespace flash
 
 #endif
