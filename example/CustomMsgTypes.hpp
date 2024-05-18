@@ -6,7 +6,8 @@ enum class CustomMsgTypes : uint32_t {
     ServerDeny,
     ServerPing,
     MessageAll,
-    ServerMessage
+    ServerMessage,
+    ClientDisconnect
 };
 
 #endif

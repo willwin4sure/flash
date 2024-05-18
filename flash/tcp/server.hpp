@@ -62,7 +62,7 @@ public:
 
         } catch (std::exception& e) {
             // Something prohibited the server from starting, print the error.
-            std::cerr << "[SERVER] Exception: " << e.what() << '\n';
+            std::cout << "[SERVER] Exception: " << e.what() << '\n';
             return false;
         }
 
@@ -158,17 +158,25 @@ public:
      * If any client is not connected, they are removed from the server's active connections.
     */
     void MessageAllClients(const message<T>& msg, UserId ignoreClient = -1) {
-        for (auto [id, client] : m_activeConnections) {
+        std::vector<UserId> disconnectedClients;
+
+        for (auto& [id, client] : m_activeConnections) {
             if (id == ignoreClient) continue;
 
             if (client && client->IsConnected()) {
-                client->Send(msg);
+                std::cout << "Sending message to client " << id << " with contents " << msg << '\n';
+                message<T> msgCopy = msg;
+                client->Send(std::move(msgCopy));
                 
             } else {
                 // If the client socket is no longer valid, assume that the client has disconnected.
-                m_activeConnections.erase(id);
-                OnClientDisconnect(id);
+                disconnectedClients.push_back(id);
             }
+        }
+
+        for (auto id : disconnectedClients) {
+            m_activeConnections.erase(id);
+            OnClientDisconnect(id);
         }
     }
 

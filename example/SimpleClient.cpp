@@ -18,20 +18,37 @@ public:
         msg << timeNow;
         Send(std::move(msg));
     }
+
+    void SendToAll() {
+        flash::message<CustomMsgTypes> msg { CustomMsgTypes::MessageAll };
+        Send(std::move(msg));
+    }
 };
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <client_num>\n";
+        return 1;
+    }
+
+    int clientNum = std::stoi(argv[1]);
+
     CustomClient c;
     c.Connect("127.0.0.1", 60000);
-
-    int ticks = 0;
 
     bool quit = false;
     while (!quit) {
 
-        if (ticks == 100000) {   
-            std::cout << "Pinging Server\n";
-            c.PingServer();
+        if (GetKeyState('0' + clientNum) & 0x8000) {
+            if (GetKeyState('P') & 0x8000) {
+                Sleep(1000);
+                c.PingServer();
+            }
+
+            if (GetKeyState('A') & 0x8000) {
+                Sleep(1000);
+                c.SendToAll();
+            }
         }
 
         if (c.IsConnected()) {
@@ -48,6 +65,18 @@ int main() {
                     std::cout << "Ping: " << std::chrono::duration<double>(timeNow - timeThen).count() << "s\n";
                 }
                 break;
+                case CustomMsgTypes::MessageAll: {
+                    std::cout << "Server: Message to all\n";
+                }
+                break;
+                case CustomMsgTypes::ClientDisconnect: {
+                    // Server has responded to a message.
+                    uint32_t clientId;
+                    msg >> clientId;
+
+                    std::cout << "Client [" << clientId << "] Disconnected.\n";
+                }
+                break;
                 }
             }
 
@@ -55,8 +84,6 @@ int main() {
             std::cout << "Server Down\n";
             quit = true;
         }
-
-        ++ticks;
     }
 
     return 0;

@@ -75,7 +75,7 @@ public:
             m_threadContext = std::thread([this]() { m_asioContext.run(); });
 
         } catch (std::exception& e) {
-            std::cerr << "Client Exception: " << e.what() << '\n';
+            std::cout << "Client Exception: " << e.what() << '\n';
             return false;
         }
 

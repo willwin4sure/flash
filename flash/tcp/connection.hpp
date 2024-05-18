@@ -104,7 +104,7 @@ public:
                     ReadHeader();
 
                 } else {
-                    std::cerr << "Connect to server failed: " << ec.message() << '\n';
+                    std::cout << "Connect to server failed: " << ec.message() << '\n';
                 }
             }
         );
@@ -193,7 +193,7 @@ private:
                     }
 
                 } else {
-                    std::cerr << "[" << m_id << "] Read Header Fail: " << ec.message() << '\n';
+                    std::cout << "[" << m_id << "] Read Header Fail: " << ec.message() << '\n';
                     m_socket.close();
                 }
             }
@@ -212,7 +212,7 @@ private:
                     AddToIncomingMessageQueue();
 
                 } else {
-                    std::cerr << "[" << m_id << "] Read Body Fail: " << ec.message() << '\n';
+                    std::cout << "[" << m_id << "] Read Body Fail: " << ec.message() << '\n';
                     m_socket.close();
                 }
             }
@@ -242,7 +242,7 @@ private:
                     }
 
                 } else {
-                    std::cerr << "[" << m_id << "] Write Header Fail: " << ec.message() << '\n';
+                    std::cout << "[" << m_id << "] Write Header Fail: " << ec.message() << '\n';
                     m_socket.close();
                 }
             }
@@ -266,7 +266,7 @@ private:
                     }
 
                 } else {
-                    std::cerr << "[" << m_id << "] Write Body Fail: " << ec.message() << '\n';
+                    std::cout << "[" << m_id << "] Write Body Fail: " << ec.message() << '\n';
                     m_socket.close();
                 }
             }
