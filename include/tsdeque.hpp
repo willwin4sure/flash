@@ -33,7 +33,7 @@ public:
     */
     bool empty() const {
         std::scoped_lock lock { m_mutex };  // RAII lock of mutex.
-        return m_queue.empty();
+        return m_deque.empty();
     }
 
     /**
@@ -41,7 +41,7 @@ public:
     */
     size_t size() const {
         std::scoped_lock lock { m_mutex };  // RAII lock of mutex.
-        return m_queue.size();
+        return m_deque.size();
     }
 
     /**
@@ -49,7 +49,7 @@ public:
     */
     void clear() {
         std::scoped_lock lock { m_mutex };  // RAII lock of mutex.
-        m_queue.clear();
+        m_deque.clear();
     }
 
     /**
@@ -57,7 +57,7 @@ public:
     */
     const T& back() {
         std::scoped_lock lock { m_mutex };  // RAII lock of mutex.
-        return m_queue.back();
+        return m_deque.back();
     }
     
     /**
@@ -65,7 +65,7 @@ public:
     */
     const T& front() {
         std::scoped_lock lock { m_mutex };  // RAII lock of mutex.
-        return m_queue.front();
+        return m_deque.front();
     }
 
     /**
@@ -80,7 +80,7 @@ public:
     */
     void push_back(T&& value) {
         std::scoped_lock lock { m_mutex };  // RAII lock of mutex.
-        m_queue.emplace_back(std::move(value));
+        m_deque.emplace_back(std::move(value));
     }
 
     /**
@@ -88,7 +88,7 @@ public:
     */
     void push_front(T&& value) {
         std::scoped_lock lock { m_mutex };  // RAII lock of mutex.
-        m_queue.emplace_front(std::move(value));
+        m_deque.emplace_front(std::move(value));
     }    
 
     /**
@@ -98,8 +98,8 @@ public:
     */
     T pop_front() {
         std::scoped_lock lock { m_mutex };  // RAII lock of mutex.
-        auto value = std::move(m_queue.front());
-        m_queue.pop_front();
+        auto value = std::move(m_deque.front());
+        m_deque.pop_front();
         return value;
     }
 
@@ -110,8 +110,8 @@ public:
     */
     T pop_back() {
         std::scoped_lock lock { m_mutex };  // RAII lock of mutex.
-        auto value = std::move(m_queue.back());
-        m_queue.pop_back();
+        auto value = std::move(m_deque.back());
+        m_deque.pop_back();
         return value;
     }
 
@@ -120,7 +120,7 @@ protected:
     mutable std::mutex m_mutex;
 
     /// The underlying double-ended queue holding the data.
-    std::deque<T> m_queue;
+    std::deque<T> m_deque;
 };
 
 } // namespace flash
