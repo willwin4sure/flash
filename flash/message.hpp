@@ -17,7 +17,7 @@
 
 namespace flash {
 
-/// Type of the user ID. Id 0 to represent the server, -1 to represent invalid.
+/// Type of the user ID. Id 0 to represent the server, -1 (max) to represent invalid.
 using UserId = uint32_t;
 
 /**
@@ -164,8 +164,8 @@ struct tagged_message {
         return os;
     }
 
-    /// Id of the remote user, 0 for server and non-zero for clients.
-    UserId m_remote { 0 };
+    /// Id of the remote user, 0 for server and non-zero for clients. -1 (max) for invalid.
+    UserId m_remote { static_cast<UserId>(-1) };
 
     /// The actual message.
     message<T> m_msg;

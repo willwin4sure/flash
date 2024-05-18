@@ -4,7 +4,7 @@
 /**
  * @file server.hpp
  * 
- * Server class that wraps asio networking code.
+ * Server class that wraps asio networking code using TCP.
  */
 
 #include "flash/message.hpp"
@@ -223,6 +223,7 @@ protected:
     boost::asio::ip::tcp::acceptor m_asioAcceptor;
 
     /// Clients are identified via a numeric ID, which is must simpler.
+    /// Six digits for pretty printing with "SERVER".
     UserId m_uidCounter = 100000;
 };
 

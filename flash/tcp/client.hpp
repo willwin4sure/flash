@@ -4,8 +4,8 @@
 /**
  * @file client.hpp
  * 
- * Client class that wraps asio networking code.
-*/
+ * Client class that wraps asio networking code using TCP.
+ */
 
 #include <boost/asio.hpp>
 

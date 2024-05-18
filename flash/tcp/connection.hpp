@@ -4,7 +4,7 @@
 /**
  * @file connection.hpp
  * 
- * Contains class that represents a connection between a client and a server.
+ * Contains class that represents a TCP connection between a client and a server.
  * Abstracts away asio and asynchronous operations: the interface is just
  * a send operation for outgoing messages and a thread-safe queue of incoming messages.
 */
@@ -95,13 +95,14 @@ public:
         // Only the client should connect to servers.
         if (m_ownerType != owner::client) return;
 
-        m_id = 0;
-
         boost::asio::async_connect(m_socket, endpoints,
             [this](std::error_code ec, boost::asio::ip::tcp::endpoint endpoint) {
                 if (!ec) {
+                    m_id = 0;
+                    
                     // Start waiting for message headers.
                     ReadHeader();
+
                 } else {
                     std::cerr << "Connect to server failed: " << ec.message() << '\n';
                 }
@@ -153,7 +154,7 @@ protected:
     owner m_ownerType { owner::server };
 
     /// Identifier of the connection, initialized to max value and set when connected.
-    UserId m_id { static_cast<uint32_t>(-1) };
+    UserId m_id { static_cast<UserId>(-1) };
 
     /// Each connection has a unique socket that is connected to a remote; we own it.
     boost::asio::ip::tcp::socket m_socket;
