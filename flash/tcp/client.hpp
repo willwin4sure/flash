@@ -11,10 +11,14 @@
 
 #include <iostream>
 
-#include "message.hpp"
-#include "ts_deque.hpp"
+#include "flash/message.hpp"
+#include "flash/ts_deque.hpp"
+
+#include "flash/tcp/connection.hpp"
 
 namespace flash {
+
+namespace tcp {
 
 /**
  * Client class that handles connection to the server.
@@ -136,6 +140,8 @@ private:
     /// The thread-safe queue of messages from the server.
     ts_deque<tagged_message<T>> m_qMessagesIn;
 };
+
+} // namespace tcp
 
 } // namespace flash
 

@@ -1,14 +1,15 @@
-#include "client.hpp"
-#include "connection.hpp"
-#include "message.hpp"
-#include "server.hpp"
-#include "ts_deque.hpp"
+#include "flash/message.hpp"
+#include "flash/ts_deque.hpp"
+
+#include "flash/tcp/client.hpp"
+#include "flash/tcp/connection.hpp"
+#include "flash/tcp/server.hpp"
 
 #include "CustomMsgTypes.hpp"
 
-class CustomServer : public flash::server<CustomMsgTypes> {
+class CustomServer : public flash::tcp::server<CustomMsgTypes> {
 public:
-    CustomServer(uint16_t port) : flash::server<CustomMsgTypes>(port) {
+    CustomServer(uint16_t port) : flash::tcp::server<CustomMsgTypes>(port) {
         
     }
 

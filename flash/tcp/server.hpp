@@ -7,13 +7,16 @@
  * Server class that wraps asio networking code.
  */
 
-#include "connection.hpp"
-#include "message.hpp"
-#include "ts_deque.hpp"
+#include "flash/message.hpp"
+#include "flash/ts_deque.hpp"
+
+#include "flash/tcp/connection.hpp"
 
 #include <iostream>
 
 namespace flash {
+
+namespace tcp {
 
 /**
  * Server class that handles connections from clients.
@@ -222,6 +225,8 @@ protected:
     /// Clients are identified via a numeric ID, which is must simpler.
     UserId m_uidCounter = 100000;
 };
+
+} // namespace tcp
 
 } // namespace flash
 

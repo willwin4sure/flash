@@ -9,14 +9,16 @@
  * a send operation for outgoing messages and a thread-safe queue of incoming messages.
 */
 
-#include "message.hpp"
-#include "ts_deque.hpp"
+#include "flash/message.hpp"
+#include "flash/ts_deque.hpp"
 
 #include <boost/asio.hpp>
 
 #include <memory>
 
 namespace flash {
+
+namespace tcp {
 
 /**
  * Connection class that represents a connection between a client and a server,
@@ -280,6 +282,8 @@ private:
         ReadHeader();
     }
 };
+
+} // namespace tcp
 
 } // namespace flash
 

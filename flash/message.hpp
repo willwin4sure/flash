@@ -10,17 +10,15 @@
 
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <memory>
+#include <vector>
 
 namespace flash {
 
 /// Type of the user ID. Id 0 to represent the server, -1 to represent invalid.
 using UserId = uint32_t;
-
-// Forward declaration.
-template <typename T>
-class connection;
 
 /**
  * Header that is sent at the start of every message, with a fixed size.

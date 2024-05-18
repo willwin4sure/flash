@@ -1,12 +1,13 @@
-#include "client.hpp"
-#include "connection.hpp"
-#include "message.hpp"
-#include "server.hpp"
-#include "ts_deque.hpp"
+#include "flash/message.hpp"
+#include "flash/ts_deque.hpp"
+
+#include "flash/tcp/client.hpp"
+#include "flash/tcp/connection.hpp"
+#include "flash/tcp/server.hpp"
 
 #include "CustomMsgTypes.hpp"
 
-class CustomClient : public flash::client<CustomMsgTypes> {
+class CustomClient : public flash::tcp::client<CustomMsgTypes> {
 public:
     void PingServer() {
         flash::message<CustomMsgTypes> msg { CustomMsgTypes::ServerPing };
