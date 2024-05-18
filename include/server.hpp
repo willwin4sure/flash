@@ -1,14 +1,31 @@
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
+/**
+ * @file server.hpp
+ * 
+ * Server class that wraps asio networking code.
+ */
+
 #include "connection.hpp"
 #include "message.hpp"
-#include "tsdeque.hpp"
+#include "ts_deque.hpp"
 
 #include <iostream>
 
 namespace flash {
 
+/**
+ * Server class that handles connections from clients.
+ * 
+ * Provides an interface to start and wait for connecting clients,
+ * to message clients individually or all at once, and to receive
+ * messages through a thread-safe queue.
+ * 
+ * Should be inherited for custom functionality.
+ * 
+ * @tparam T the message type to send and receive.
+*/
 template <typename T>
 class server {
 public:
@@ -28,6 +45,8 @@ public:
 
     /**
      * Start the server. It will begin listening for clients on the asio context thread.
+     * 
+     * @returns Whether the server started successfully.
     */
     bool Start() {
         try {
@@ -206,7 +225,7 @@ protected:
     boost::asio::ip::tcp::acceptor m_asioAcceptor;
 
     /// Clients are identified via a numeric ID, which is must simpler.
-    uint32_t m_uidCounter = 100000;
+    ClientId m_uidCounter = 100000;
 };
 
 } // namespace flash

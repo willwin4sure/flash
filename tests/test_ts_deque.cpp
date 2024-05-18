@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "message.hpp"
-#include "tsdeque.hpp"
+#include "ts_deque.hpp"
 
 #include <iostream>
 
@@ -30,6 +30,10 @@ TEST_CASE( "Deque supports correct pushing and popping at back", "[ts_deque]" ) 
     REQUIRE( deque.back() == 3 );
 
     REQUIRE( deque.size() == 2 );
+
+    deque.clear();
+
+    REQUIRE( deque.size() == 0 );
 }
 
 TEST_CASE( "Deque supports correct pushing and popping at front", "[ts_deque]" ) {
@@ -80,4 +84,8 @@ TEST_CASE( "Deque supports messages", "[ts_deque]" ) {
 
     REQUIRE( a == 1.0 );
     REQUIRE( b == 2.0 );
+
+    deque.clear();
+
+    REQUIRE( deque.size() == 0 );
 }

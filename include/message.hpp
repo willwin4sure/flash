@@ -4,71 +4,71 @@
 /**
  * @file message.hpp
  * 
- * Structs for messages on a network connection.
+ * Structs for messages on a network connection, including a header and body.
+ * Provides an interface for pushing and popping fundamental data types.
 */
 
+#include <cassert>
 #include <cstdint>
 #include <iostream>
 #include <memory>
 
 namespace flash {
 
-
 // Forward declaration.
 template <typename T>
 class connection;
 
-// Forward declaration.
-template <typename T>
-class server;
-
-
 /**
  * Header that is sent at the start of every message, with a fixed size.
+ * Contains the type of the message and the size of the message body.
  * 
- * @tparam T the type of the message id. Should be an enum class
- *         with underlying type of uint32_t.
- * 
- * @property id the id of the message.
- * @property size the size of the message in bytes, including the header.
+ * @tparam T an enum class containing possible types of messages to be sent.
 */
 template <typename T>
 struct header {
-    T id {};
-    uint32_t size { 0 };
+    /// Type of the message.
+    T m_type {};
+
+    /// Size of the message body associated with this header.
+    uint32_t m_size { 0 };
 };
 
 
 /**
  * Message class that is used to send and receive messages over a network connection.
+ * Contains both the header of the message and the body of the message.
  * 
  * Supports pushing and popping fundamental data types with the `<<` and `>>` operators.
+ * For types larger than a byte, does not handle endianness, so only use byte-sized
+ * types if your machines differ in endianness. Most modern machines are little-endian.
  * 
  * @tparam T the type of the message id. Should be an enum class
  *         with underlying type of uint32_t.
- * 
- * @property header the header of the message, containing the id and size.
- * @property body the body of the message, containing the data.
 */
 template <typename T>
 struct message {
-    /**
-     * Constructs an empty message with the given id.
-    */
-    message(T id) : m_header { id, 0 } {}
+
+    header<T> m_header;
+    std::vector<uint8_t> m_body;
 
     /**
-     * Get the size of the entire message in bytes.
+     * Constructs an empty message with the given type.
+    */
+    message(T type) : m_header { type, 0 } { }
+
+    /**
+     * @returns The size of the entire message in bytes.
     */
     size_t size() const { return sizeof(header<T>) + m_body.size(); }
 
     /**
-     * Gets a const reference to the header of the message.
+     * @returns A const reference to the header of the message.
     */
     const header<T>& get_header() const { return m_header; }
 
     /**
-     * Gets a const reference to the full message body as a vector of bytes.
+     * @returns A const reference to the full message body as a vector of bytes.
     */
     const std::vector<uint8_t>& get_body() const { return m_body; }
 
@@ -76,7 +76,8 @@ struct message {
      * Allow easy printing of the message using `std::cout`.
     */
     friend std::ostream& operator<<(std::ostream& os, const message<T>& msg) {
-        os << "ID: " << static_cast<int>(msg.m_header.id) << " Size: " << msg.m_header.size;
+        os << "Type: " << static_cast<int>(msg.m_header.m_type) << " "
+           << "Size: " << msg.m_header.m_size;
         return os;
     }
 
@@ -92,20 +93,21 @@ struct message {
      * 
      * @warning Doesn't handle endianness, so may not work across different architectures.
      * If you care about this, then serialize the data yourself before pushing it;
-     * one option is to just use string representations of the data.
+     * one option is to just use string representations of the data. Or just only
+     * use data with byte-sized types.
     */
     template <typename U>
     friend message<T>& operator<<(message<T>& msg, const U& data) {
         static_assert(std::is_standard_layout<U>::value,
             "Data is too complex to be pushed into message.");
 
-        // Resize the message body to fit the new data
-        size_t i = msg.m_body.size();
+        // Resize the message body to fit the new data.
+        size_t idx = msg.m_body.size();
         msg.m_body.resize(msg.m_body.size() + sizeof(U));
 
-        // Copy the data into the message body
-        std::memcpy(msg.m_body.data() + i, &data, sizeof(U));
-        msg.m_header.size = msg.size();
+        // Copy the data into the message body from the data.
+        std::memcpy(msg.m_body.data() + idx, &data, sizeof(U));
+        msg.m_header.m_size = msg.m_body.size();
 
         return msg;
     }
@@ -126,21 +128,18 @@ struct message {
         static_assert(std::is_standard_layout<U>::value,
             "Data is too complex to be popped from message.");
 
-        // Get the size of the data being popped
-        size_t i = msg.m_body.size() - sizeof(U);
+        // Remove the size of the data being popped.
+        size_t idx = msg.m_body.size() - sizeof(U);
 
-        // Copy the data from the message body into the variable
-        std::memcpy(&data, msg.m_body.data() + i, sizeof(U));
+        // Copy the data into the variable from the message body.
+        std::memcpy(&data, msg.m_body.data() + idx, sizeof(U));
 
-        // Shrink the message body to remove the data
-        msg.m_body.resize(i);
-        msg.m_header.size = msg.size();
+        // Shrink the message body to remove the data.
+        msg.m_body.resize(idx);
+        msg.m_header.m_size = msg.m_body.size();
 
         return msg;
     }
-
-    header<T> m_header;
-    std::vector<uint8_t> m_body;
 };
 
 
@@ -156,7 +155,7 @@ struct tagged_message {
      * Constructs a tagged message with the given message and connection.
     */
     tagged_message(std::shared_ptr<connection<T>> remote, message<T>& msg)
-        : m_remote { remote }, m_msg { msg } {}
+        : m_remote { remote }, m_msg { msg } { }
 
     friend std::ostream& operator<<(std::ostream& os, const tagged_message<T>& tagged_msg) {
         os << tagged_msg.m_msg;  // TODO: add representation of the Connection.

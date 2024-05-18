@@ -2,7 +2,7 @@
 #include "connection.hpp"
 #include "message.hpp"
 #include "server.hpp"
-#include "tsdeque.hpp"
+#include "ts_deque.hpp"
 
 #include "CustomMsgTypes.hpp"
 
@@ -24,7 +24,7 @@ protected:
     }
 
     void OnMessage(std::shared_ptr<flash::connection<CustomMsgTypes>> client, flash::message<CustomMsgTypes>& msg) override {
-        switch (msg.m_header.id) {
+        switch (msg.m_header.m_type) {
         case CustomMsgTypes::ServerPing:
         {
             std::cout << "[" << client->GetId() << "] Server Ping\n";

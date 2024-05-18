@@ -1,8 +1,16 @@
 #ifndef CONNECTION_HPP
 #define CONNECTION_HPP
 
+/**
+ * @file connection.hpp
+ * 
+ * Contains class that represents a connection between a client and a server.
+ * Abstracts away asio and asynchronous operations: the interface is just
+ * a send operation for outgoing messages and a thread-safe queue of incoming messages.
+*/
+
 #include "message.hpp"
-#include "tsdeque.hpp"
+#include "ts_deque.hpp"
 
 #include <boost/asio.hpp>
 
@@ -10,14 +18,18 @@
 
 namespace flash {
 
+using ClientId = uint32_t;
+
 /**
- * Connection class that represents a connection between a client and a server.
+ * Connection class that represents a connection between a client and a server,
+ * owned by one of the sides.
  * 
- * @tparam T The type of the message to be sent.
+ * @tparam T an enum class containing possible types of messages to be sent.
  *
- * @note that we subclass on std::enable_shared_from_this to allow any shared_ptr
- * to this connection to generate another shared_ptr for the connection, which is
- * necessary for the server to distribute multiple shared_ptrs to the same connection.
+ * @note that we subclass on std::enable_shared_from_this to allow any shared pointer
+ * to this connection to generate another shared pointer for the connection.
+ * This is because messages received from the clients at the server are tagged
+ * with the connection that they came from.
 */
 template <typename T>
 class connection : public std::enable_shared_from_this<connection<T>> {
@@ -26,64 +38,102 @@ public:
     /**
      * The type of the connection owner. Behavior is slightly different depending on the owner.
     */
-    enum class owner {
+    enum class owner : uint8_t {
         server,
         client
     };
 
-    connection(
-        owner parent,
-        boost::asio::io_context& asioContext,
-        boost::asio::ip::tcp::socket socket,
-        ts_deque<tagged_message<T>>& qMessagesIn
-    ) : m_ownerType { parent }, m_asioContext { asioContext }, m_socket { std::move(socket) }, m_qMessagesIn { qMessagesIn } { }
+    /**
+     * Constructor for the connection. Sets up the connection with the given parameters.
+     * 
+     * @param parent the owner of the connection.
+     * @param asioContext a reference to the asio context that the connection will run on.
+     * @param socket the socket that the connection will use.
+     * @param qMessagesIn a reference to the queue to deposit incoming messages into.
+    */
+    connection(owner parent, boost::asio::io_context& asioContext, boost::asio::ip::tcp::socket&& socket, ts_deque<tagged_message<T>>& qMessagesIn)
+        : m_ownerType { parent }, m_asioContext { asioContext }, m_socket { std::move(socket) }, m_qMessagesIn { qMessagesIn } { }
 
-    virtual ~connection() {}
+    virtual ~connection() { }
 
-    uint32_t GetId() const { return m_id; }
+    /**
+     * @returns The ID of the connection.
+     * This should be 0 if the owner is a client,
+     * and the ID of the client is the owner is a server.
+    */
+    ClientId GetId() const { return m_id; }
 
-    void ConnectToClient(uint32_t uid = 0) {
+    /**
+     * Turns the connection on by connecting it to a client,
+     * and prompting it to continuously read header messages from the socket.
+     * 
+     * In order for this to do any work, the socket that we got
+     * from the client connecting must be placed in this object and open.
+     * 
+     * @param uid the ID of the client to connect to.
+    */
+    void ConnectToClient(ClientId uid = 0) {
         // Only the server should connect to clients.
-        if (m_ownerType == owner::server) {
-            if (m_socket.is_open()) {
-                m_id = uid;
+        if (m_ownerType != owner::server) return;
 
-                // Start waiting for message headers.
-                ReadHeader();
-            }            
+        if (m_socket.is_open()) {
+            // Set the ID of this connection to a client.
+            m_id = uid;
+
+            // Start waiting for message headers.
+            ReadHeader();
         }
     }
 
+    /**
+     * Triggers this connection to start doing work by connecting it to the server,
+     * and prompting it to continuously read header messages from the socket.
+     * 
+     * @param endpoints the results of a resolver operation that will be used to connect to the server.
+    */
     void ConnectToServer(const boost::asio::ip::tcp::resolver::results_type& endpoints) {
         // Only the client should connect to servers.
-        if (m_ownerType == owner::client) {
-            boost::asio::async_connect(m_socket, endpoints,
-                [this](std::error_code ec, boost::asio::ip::tcp::endpoint endpoint) {
-                    if (!ec) {
-                        // Start waiting for message headers.
-                        ReadHeader();
-                    } else {
-                        std::cerr << "Connect to server failed: " << ec.message() << '\n';
-                    }
+        if (m_ownerType != owner::client) return;
+
+        boost::asio::async_connect(m_socket, endpoints,
+            [this](std::error_code ec, boost::asio::ip::tcp::endpoint endpoint) {
+                if (!ec) {
+                    // Start waiting for message headers.
+                    ReadHeader();
+                } else {
+                    std::cerr << "Connect to server failed: " << ec.message() << '\n';
                 }
-            );
-        }
+            }
+        );
     }
 
+    /**
+     * Disconnects the connection by closing the socket.
+    */
     void Disconnect() {
         if (IsConnected()) {
             boost::asio::post(m_asioContext, [this]() { m_socket.close(); });
         }
     }
 
+    /**
+     * @returns true if the connection is connected, false otherwise.
+    */
     bool IsConnected() const {
         return m_socket.is_open();
     }
 
+    /**
+     * Sends a message to the remote side of the connection.
+     * 
+     * @param msg the message to send, moved in.
+    */
     void Send(message<T>&& msg) {
         boost::asio::post(m_asioContext,
+            
             // Black magic generalized lambda capture from
             // https://stackoverflow.com/questions/8640393/move-capture-in-lambda
+
             [this, msg = std::move(msg)] () mutable {
                 bool areWritingMessage = !m_qMessagesOut.empty();
                 m_qMessagesOut.push_back(std::move(msg));
@@ -101,7 +151,7 @@ protected:
     owner m_ownerType { owner::server };
 
     /// Identifier of the client connection.
-    uint32_t m_id { 0 };
+    ClientId m_id { 0 };
 
     /// Each connection has a unique socket that is connected to a remote; we own it.
     boost::asio::ip::tcp::socket m_socket;
@@ -125,12 +175,13 @@ private:
      * Asynchronous task for the asio context, waiting to read a message header of appropriate size.
     */
     void ReadHeader() {
+        // Tell asio to wait for the header to fill the buffer and then run a callback.
         boost::asio::async_read(m_socket, boost::asio::buffer(&m_msgTemporaryIn.m_header, sizeof(header<T>)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
-                    if (m_msgTemporaryIn.m_header.size > 0) {
+                    if (m_msgTemporaryIn.m_header.m_size > 0) {
                         // If the message has a body, resize the body to fit the message and wait for it.
-                        m_msgTemporaryIn.m_body.resize(m_msgTemporaryIn.m_header.size - sizeof(header<T>));
+                        m_msgTemporaryIn.m_body.resize(m_msgTemporaryIn.m_header.m_size);
                         ReadBody();
 
                     } else {
@@ -150,6 +201,7 @@ private:
      * Asynchronous task for the asio context, waiting to read a message body.
     */
     void ReadBody() {
+        // Tell asio to wait for the body to fill the buffer and then run a callback.
         boost::asio::async_read(m_socket, boost::asio::buffer(m_msgTemporaryIn.m_body.data(), m_msgTemporaryIn.m_body.size()),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
@@ -168,15 +220,19 @@ private:
      * Asynchronous task for the asio context to write a message header.
     */
     void WriteHeader() {
+        // Tell asio to wait for the header to be written and then run a callback.
         boost::asio::async_write(m_socket, boost::asio::buffer(&m_qMessagesOut.front().m_header, sizeof(header<T>)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     if (m_qMessagesOut.front().m_body.size() > 0) {
+                        // If the message has a body, write it as well.
                         WriteBody();
 
                     } else {
+                        // If the message has no body, remove it from the queue.
                         m_qMessagesOut.pop_front();
 
+                        // Keep writing if there are more messages to send.
                         if (!m_qMessagesOut.empty()) {
                             WriteHeader();
                         }
@@ -194,11 +250,14 @@ private:
      * Asynchronous task for the asio context to write a message body.
     */
     void WriteBody() {
+        // Tell asio to wait for the body to be written and then run a callback.
         boost::asio::async_write(m_socket, boost::asio::buffer(m_qMessagesOut.front().m_body.data(), m_qMessagesOut.front().m_body.size()),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
+                    // The header and body have both be written, so remove from the queue.
                     m_qMessagesOut.pop_front();
 
+                    // Keep writing if there are more messages to send.
                     if (!m_qMessagesOut.empty()) {
                         WriteHeader();
                     }
@@ -211,6 +270,9 @@ private:
         );
     }
 
+    /**
+     * Asynchronous task for the asio context to add a message to the incoming message queue.
+    */
     void AddToIncomingMessageQueue() {
         if (m_ownerType == owner::server) {
             // Server needs to tag the message with the client that sent it.
