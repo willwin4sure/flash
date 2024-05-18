@@ -1,7 +1,7 @@
 # Flash
 
 C++ framework for message passing in a client-server model,
-abstracting away asio networking and multithreading. 
+abstracting away ASIO networking and multithreading. 
 
 Based on a [video series by javidx9](https://www.youtube.com/watch?v=2hNdkYInj4g),
 with modifications.

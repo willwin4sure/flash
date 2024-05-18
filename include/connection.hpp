@@ -22,6 +22,10 @@ namespace flash {
 template <typename T>
 class connection : public std::enable_shared_from_this<connection<T>> {
 public:
+
+    /**
+     * The type of the connection owner. Behavior is slightly different depending on the owner.
+    */
     enum class owner {
         server,
         client
@@ -39,8 +43,8 @@ public:
     uint32_t GetId() const { return m_id; }
 
     void ConnectToClient(uint32_t uid = 0) {
+        // Only the server should connect to clients.
         if (m_ownerType == owner::server) {
-            // Only the server should connect to clients.
             if (m_socket.is_open()) {
                 m_id = uid;
 
@@ -50,29 +54,42 @@ public:
         }
     }
 
-    bool ConnectToServer();
+    void ConnectToServer(const boost::asio::ip::tcp::resolver::results_type& endpoints) {
+        // Only the client should connect to servers.
+        if (m_ownerType == owner::client) {
+            boost::asio::async_connect(m_socket, endpoints,
+                [this](std::error_code ec, boost::asio::ip::tcp::endpoint endpoint) {
+                    if (!ec) {
+                        // Start waiting for message headers.
+                        ReadHeader();
+                    } else {
+                        std::cerr << "Connect to server failed: " << ec.message() << '\n';
+                    }
+                }
+            );
+        }
+    }
 
-    bool Disconnect() {
+    void Disconnect() {
         if (IsConnected()) {
             boost::asio::post(m_asioContext, [this]() { m_socket.close(); });
-            return true;
         }
-
-        return false;
     }
 
     bool IsConnected() const {
         return m_socket.is_open();
     }
 
-    bool Send(message<T>&& msg) {
+    void Send(message<T>&& msg) {
         boost::asio::post(m_asioContext,
-            [this, msg]() {
+            // Black magic generalized lambda capture from
+            // https://stackoverflow.com/questions/8640393/move-capture-in-lambda
+            [this, msg = std::move(msg)] () mutable {
                 bool areWritingMessage = !m_qMessagesOut.empty();
                 m_qMessagesOut.push_back(std::move(msg));
 
+                // If writing is already occurring, no need to start the loop again.
                 if (!areWritingMessage) {
-                    // If writing is already occurring, no need to start it again.
                     WriteHeader();
                 }
             }
@@ -100,8 +117,8 @@ protected:
     /// why we have to tag the messages with the connection they came from.
     ts_deque<tagged_message<T>>& m_qMessagesIn;
 
-    /// Temporary message to hold incoming message data.
-    message<T> m_msgTemporaryIn;
+    /// Temporary message to hold incoming message data, initialized with garbage.
+    message<T> m_msgTemporaryIn { static_cast<T>(0) };
 
 private:
     /**
@@ -113,7 +130,7 @@ private:
                 if (!ec) {
                     if (m_msgTemporaryIn.m_header.size > 0) {
                         // If the message has a body, resize the body to fit the message and wait for it.
-                        m_msgTemporaryIn.m_body.resize(m_msgTemporaryIn.m_header.size);
+                        m_msgTemporaryIn.m_body.resize(m_msgTemporaryIn.m_header.size - sizeof(header<T>));
                         ReadBody();
 
                     } else {
@@ -122,7 +139,7 @@ private:
                     }
 
                 } else {
-                    std::cout << "[" << m_id << "] Read Header Fail.\n";
+                    std::cerr << "[" << m_id << "] Read Header Fail: " << ec.message() << '\n';
                     m_socket.close();
                 }
             }
@@ -140,7 +157,7 @@ private:
                     AddToIncomingMessageQueue();
 
                 } else {
-                    std::cout << "[" << m_id << "] Read Body Fail.\n";
+                    std::cerr << "[" << m_id << "] Read Body Fail: " << ec.message() << '\n';
                     m_socket.close();
                 }
             }
@@ -151,7 +168,7 @@ private:
      * Asynchronous task for the asio context to write a message header.
     */
     void WriteHeader() {
-        boost::asio::async_write(m_socket, asio::buffer(&m_qMessagesOut.front().m_header, sizeof(header<T>)),
+        boost::asio::async_write(m_socket, boost::asio::buffer(&m_qMessagesOut.front().m_header, sizeof(header<T>)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     if (m_qMessagesOut.front().m_body.size() > 0) {
@@ -166,7 +183,7 @@ private:
                     }
 
                 } else {
-                    std::cout << "[" << m_id << "] Write Header Fail.\n";
+                    std::cerr << "[" << m_id << "] Write Header Fail: " << ec.message() << '\n';
                     m_socket.close();
                 }
             }
@@ -177,7 +194,7 @@ private:
      * Asynchronous task for the asio context to write a message body.
     */
     void WriteBody() {
-        boost::asio::async_write(m_socket, asio::buffer(m_qMessagesOut.front().m_body.data(), m_qMessagesOut.front().m_body.size()),
+        boost::asio::async_write(m_socket, boost::asio::buffer(m_qMessagesOut.front().m_body.data(), m_qMessagesOut.front().m_body.size()),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     m_qMessagesOut.pop_front();
@@ -187,7 +204,7 @@ private:
                     }
 
                 } else {
-                    std::cout << "[" << m_id << "] Write Body Fail.\n";
+                    std::cerr << "[" << m_id << "] Write Body Fail: " << ec.message() << '\n';
                     m_socket.close();
                 }
             }
@@ -197,10 +214,10 @@ private:
     void AddToIncomingMessageQueue() {
         if (m_ownerType == owner::server) {
             // Server needs to tag the message with the client that sent it.
-            m_qMessagesIn.push_back({ this->shared_from_this(), m_msgTemporaryIn });
+            m_qMessagesIn.push_back(tagged_message<T>{ this->shared_from_this(), m_msgTemporaryIn });
         } else {
             // Clients can only talk to server so no need to tag.
-            m_qMessagesIn.push_back({ nullptr, m_msgTemporaryIn });
+            m_qMessagesIn.push_back(tagged_message<T>{ nullptr, m_msgTemporaryIn });
         }
 
         // Need to keep the asio context busy.

@@ -13,6 +13,16 @@
 
 namespace flash {
 
+
+// Forward declaration.
+template <typename T>
+class connection;
+
+// Forward declaration.
+template <typename T>
+class server;
+
+
 /**
  * Header that is sent at the start of every message, with a fixed size.
  * 
@@ -41,8 +51,7 @@ struct header {
  * @property body the body of the message, containing the data.
 */
 template <typename T>
-class message {
-public:
+struct message {
     /**
      * Constructs an empty message with the given id.
     */
@@ -130,15 +139,9 @@ public:
         return msg;
     }
 
-private:
     header<T> m_header;
     std::vector<uint8_t> m_body;
 };
-
-
-// Forward declaration.
-template <typename T>
-class connection;
 
 
 /**
@@ -148,22 +151,23 @@ class connection;
  *         with underlying type of uint32_t.
 */
 template <typename T>
-class tagged_message {
+struct tagged_message {
+    /**
+     * Constructs a tagged message with the given message and connection.
+    */
+    tagged_message(std::shared_ptr<connection<T>> remote, message<T>& msg)
+        : m_remote { remote }, m_msg { msg } {}
 
-public:
     friend std::ostream& operator<<(std::ostream& os, const tagged_message<T>& tagged_msg) {
         os << tagged_msg.m_msg;  // TODO: add representation of the Connection.
         return os;
     }
 
-private:
     /// Connection associated with the sender of the message.
     std::shared_ptr<connection<T>> m_remote = nullptr;
 
     /// The actual message.
     message<T> m_msg;
-
-    friend class connection<T>;
 };
 
 } // namespace flash

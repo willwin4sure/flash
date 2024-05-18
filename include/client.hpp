@@ -12,7 +12,7 @@ namespace flash {
 template <typename T>
 class client {
 public:
-    client() : m_socket { m_context } {
+    client() {
 
     }
 
@@ -22,15 +22,20 @@ public:
 
     bool Connect(const std::string& host, const uint16_t port) {
         try {
-            // Create a connection.
-            m_connection = std::make_unique<connection<T>>();  // TODO
-
             // Resolve the host name and port number into an endpoint.
             boost::asio::ip::tcp::resolver resolver { m_context };
-            auto m_endpoints = resolver.resolve(host, std::to_string(port));
+            boost::asio::ip::tcp::resolver::results_type endpoints = resolver.resolve(host, std::to_string(port));
+
+            // Create a connection.
+            m_connection = std::make_unique<connection<T>>(
+                connection<T>::owner::client,
+                m_context,                               // Provide the connection with the surrounding asio context.
+                boost::asio::ip::tcp::socket(m_context), // Create a new socket.
+                m_qMessagesIn                            // Reference to the client's incoming message queue.
+            );
 
             // Connect to the server.
-            m_connection->ConnectToServer(m_endpoints);
+            m_connection->ConnectToServer(endpoints);
 
             // Start running the context in its own thread.
             m_threadContext = std::thread([this]() { m_context.run(); });
@@ -57,7 +62,13 @@ public:
     }
 
     bool IsConnected() {
-        return false;
+        return m_connection && m_connection->IsConnected();
+    }
+
+    void Send(message<T>&& msg) {
+        if (IsConnected()) {
+            m_connection->Send(std::move(msg));
+        }
     }
 
     /**
@@ -74,15 +85,12 @@ protected:
     // Thread for the context to execute its work commands independently.
     std::thread m_threadContext;
 
-    // The socket that is connected to the server.
-    boost::asio::ip::tcp::socket m_socket;  // TODO: I'd prefer this not to be here.
-
     // The single instance of a connection object, which handles data transfer.
     std::unique_ptr<connection<T>> m_connection;
 
 private:
     // The thread-safe queue of messages from the server.
-    ts_deque<tagged_message<T>>& m_qMessagesIn;
+    ts_deque<tagged_message<T>> m_qMessagesIn;
 };
 
 } // namespace flash

@@ -88,7 +88,7 @@ public:
                         // Tell the connection to connect to the client and assign them a unique ID.
                         m_activeConnections.back()->ConnectToClient(m_uidCounter++);
 
-                        std::cout << "[" << m_activeConnections.back()->GetID() << "] Connection Approved\n";
+                        std::cout << "[" << m_activeConnections.back()->GetId() << "] Connection Approved\n";
 
                     } else {
                         std::cout << "[------] Connection Denied\n";
@@ -101,7 +101,7 @@ public:
                 // No matter what happens, make sure the asio context still has more work.
                 WaitForClientConnection();
             }
-        )
+        );
     }
 
     /**
@@ -134,7 +134,7 @@ public:
     void MessageAllClients(const message<T>& msg, std::shared_ptr<connection<T>> ignoreClient = nullptr) {
         bool bInvalidClientExists = false;  // Whether at least one client has disconnected.
 
-        for (auto& client : m_deqConnections) {
+        for (auto& client : m_activeConnections) {
             if (client && client->IsConnected()) {
                 if (client != ignoreClient) {
                     client->Send(msg);
@@ -176,19 +176,19 @@ protected:
      * 
      * Must be overridden by derived class to accept any connections.
     */
-    virtual bool OnClientConnect(std::shared_ptr<connection<T>> client) { return false; }
+    virtual bool OnClientConnect(std::shared_ptr<connection<T>> client) = 0;
 
     /**
      * Called when a client appears to have disconnected.
      * Can be used to remove the user from the game state.
     */
-    virtual void OnClientDisconnect(std::shared_ptr<connection<T>> client) { }
+    virtual void OnClientDisconnect(std::shared_ptr<connection<T>> client) = 0;
 
     /**
      * Called when a message is received from a client,
      * after we call Update to process from the queue.
     */
-    virtual void OnMessage(std::shared_ptr<connection<T>> client, message<T>& msg) { }
+    virtual void OnMessage(std::shared_ptr<connection<T>> client, message<T>& msg) = 0;
 
     /// Thread-safe deque for incoming message packets; we own it.
     ts_deque<tagged_message<T>> m_qMessagesin;

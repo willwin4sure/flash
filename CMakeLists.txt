@@ -9,7 +9,7 @@ find_package(Boost REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 if (WIN32)
-    link_libraries(ws2_32)
+    link_libraries(ws2_32 wsock32)
 endif()
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
@@ -17,3 +17,4 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 enable_testing()
 
 add_subdirectory(tests)
+add_subdirectory(example)
