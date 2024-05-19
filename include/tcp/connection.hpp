@@ -9,8 +9,8 @@
  * a send operation for outgoing messages and a thread-safe queue of incoming messages.
 */
 
-#include "flash/message.hpp"
-#include "flash/ts_deque.hpp"
+#include "message.hpp"
+#include "ts_deque.hpp"
 
 #include <boost/asio.hpp>
 

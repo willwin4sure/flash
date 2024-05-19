@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "flash/message.hpp"
-#include "flash/ts_deque.hpp"
+#include "message.hpp"
+#include "ts_deque.hpp"
 
 #include <iostream>
 

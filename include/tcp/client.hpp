@@ -11,10 +11,10 @@
 
 #include <iostream>
 
-#include "flash/message.hpp"
-#include "flash/ts_deque.hpp"
+#include "message.hpp"
+#include "ts_deque.hpp"
 
-#include "flash/tcp/connection.hpp"
+#include "tcp/connection.hpp"
 
 namespace flash {
 

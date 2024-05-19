@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "flash/message.hpp"
+#include "message.hpp"
 
 #include <array>
 

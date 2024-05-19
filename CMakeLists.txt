@@ -12,7 +12,7 @@ if (WIN32)
     link_libraries(ws2_32 wsock32)
 endif()
 
-include_directories(${PROJECT_SOURCE_DIR})
+include_directories(${PROJECT_SOURCE_DIR}/include)
 
 enable_testing()
 
