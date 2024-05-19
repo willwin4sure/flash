@@ -1,5 +1,5 @@
-#ifndef UDP_SERVER_HPP
-#define UDP_SERVER_HPP
+#ifndef FLASH_UDP_SERVER_HPP
+#define FLASH_UDP_SERVER_HPP
 
 #include <flash/message.hpp>
 #include <flash/ts_deque.hpp>
@@ -53,6 +53,8 @@ public:
 
         m_asioContext.reset();
     }
+
+    void MessageClient()
 
 private:
     // Port to listen on.

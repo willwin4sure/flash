@@ -1,5 +1,5 @@
-#ifndef TCP_CLIENT_HPP
-#define TCP_CLIENT_HPP
+#ifndef FLASH_TCP_CLIENT_HPP
+#define FLASH_TCP_CLIENT_HPP
 
 /**
  * @file client.hpp

@@ -1,5 +1,5 @@
-#ifndef TS_DEQUE_HPP
-#define TS_DEQUE_HPP
+#ifndef FLASH_TS_DEQUE_HPP
+#define FLASH_TS_DEQUE_HPP
 
 /**
  * @file ts_deque.hpp

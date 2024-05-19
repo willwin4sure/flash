@@ -1,5 +1,5 @@
-#ifndef MESSAGE_HPP
-#define MESSAGE_HPP
+#ifndef FLASH_MESSAGE_HPP
+#define FLASH_MESSAGE_HPP
 
 /**
  * @file message.hpp

@@ -1,5 +1,5 @@
-#ifndef UDP_CLIENT_HPP
-#define UDP_CLIENT_HPP
+#ifndef FLASH_UDP_CLIENT_HPP
+#define FLASH_UDP_CLIENT_HPP
 
 /**
  * @file client.hpp
