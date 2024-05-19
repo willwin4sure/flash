@@ -1,5 +1,5 @@
-#ifndef SERVER_HPP
-#define SERVER_HPP
+#ifndef TCP_SERVER_HPP
+#define TCP_SERVER_HPP
 
 /**
  * @file server.hpp
@@ -51,6 +51,11 @@ public:
      * @returns Whether the server started successfully.
     */
     bool Start() {
+        if (m_threadContext.joinable() && !m_asioContext.stopped()) {
+            std::cout << "[SERVER] Already running!\n";
+            return false;
+        }
+
         try {
             // Issue a task to the asio context to listen for clients.
             WaitForClientConnection();
@@ -61,11 +66,11 @@ public:
 
         } catch (std::exception& e) {
             // Something prohibited the server from starting, print the error.
-            std::cerr << "[SERVER] Startup Exception: " << e.what() << std::endl;
+            std::cerr << "[SERVER] Start Exception: " << e.what() << "\n";
             return false;
         }
 
-        std::cout << "[SERVER] Started!" << std::endl;
+        std::cout << "[SERVER] Started on port " << m_asioAcceptor.local_endpoint().port() << "\n";
         return true;
     }
 
@@ -80,52 +85,8 @@ public:
         if (m_threadContext.joinable()) m_threadContext.join();
 
         std::cout << "[SERVER] Stopped!\n";
-    }
 
-    /**
-     * Asynchronous task for the asio context thread, waiting for a client to connect.
-     * 
-     * This task should be constantly running on the server, even if no clients are around.
-    */
-    void WaitForClientConnection() {
-        m_asioAcceptor.async_accept(
-            [this](std::error_code ec, boost::asio::ip::tcp::socket socket) {
-                if (!ec) {
-                    std::cout << "[SERVER] New Connection from IP: " << socket.remote_endpoint() << '\n';
-
-                    // Make a new connection.
-                    std::unique_ptr<connection<T>> new_connection = std::make_unique<connection<T>>(
-                        connection<T>::owner::server,
-                        m_asioContext,     // Provide the connection with the surrounding asio context.
-                        std::move(socket), // Move the new socket into the connection.
-                        m_qMessagesin      // Reference to the server's incoming message queue.
-                    );
-
-                    // Give the custom server a chance to deny connection by overriding OnClientConnect.
-                    if (OnClientConnect(new_connection->GetSocket())) {
-                        // Assign a unique ID to this connection.
-                        UserId newId = m_uidCounter++;
-
-                        // Transfer ownership of the new connection to the server.
-                        m_activeConnections.emplace(newId, std::move(new_connection));
-
-                        // Tell the connection to connect to the client.
-                        m_activeConnections.at(newId)->ConnectToClient(newId);
-
-                        std::cout << "[" << newId << "] Connection Approved\n";
-
-                    } else {
-                        std::cout << "[------] Connection Denied\n";
-                    }
-
-                } else {
-                    std::cout << "[SERVER] New Connection Error: " << ec.message() << '\n';
-                }
-
-                // No matter what happens, make sure the asio context still has more work.
-                WaitForClientConnection();
-            }
-        );
+        m_asioContext.reset();  // In case you want to reuse this Server object.
     }
 
     /**
@@ -207,12 +168,16 @@ protected:
     /**
      * Called when a client appears to have disconnected.
      * Can be used to remove the user from the game state.
+     * 
+     * Must be overriden by derived class to handle disconnections.
     */
     virtual void OnClientDisconnect(UserId clientId) = 0;
 
     /**
      * Called when a message is received from a client,
      * after we call Update to process from the queue.
+     * 
+     * Must be overriden by derived class to handle messages.
     */
     virtual void OnMessage(UserId clientId, message<T>&& msg) = 0;
 
@@ -226,7 +191,7 @@ protected:
     boost::asio::io_context m_asioContext;
 
     /// Thread that runs the asio context.
-    std::thread m_threadContext;  
+    std::thread m_threadContext; 
 
     /// Acceptor object that waits for incoming connection requests.
     boost::asio::ip::tcp::acceptor m_asioAcceptor;
@@ -234,6 +199,53 @@ protected:
     /// Clients are identified via a numeric ID, which is must simpler.
     /// Six digits for pretty printing with "SERVER".
     UserId m_uidCounter = 100000;
+
+private:
+    /**
+     * Asynchronous task for the asio context thread, waiting for a client to connect.
+     * 
+     * This task should be constantly running on the server, even if no clients are around.
+    */
+    void WaitForClientConnection() {
+        m_asioAcceptor.async_accept(
+            [this](std::error_code ec, boost::asio::ip::tcp::socket socket) {
+                if (!ec) {
+                    std::cout << "[SERVER] New Connection from IP: " << socket.remote_endpoint() << "\n";
+
+                    // Make a new connection.
+                    std::unique_ptr<connection<T>> new_connection = std::make_unique<connection<T>>(
+                        connection<T>::owner::server,
+                        m_asioContext,     // Provide the connection with the surrounding asio context.
+                        std::move(socket), // Move the new socket into the connection.
+                        m_qMessagesin      // Reference to the server's incoming message queue.
+                    );
+
+                    // Give the custom server a chance to deny connection by overriding OnClientConnect.
+                    if (OnClientConnect(new_connection->GetSocket())) {
+                        // Assign a unique ID to this connection.
+                        UserId newId = m_uidCounter++;
+
+                        // Transfer ownership of the new connection to the server.
+                        m_activeConnections.emplace(newId, std::move(new_connection));
+
+                        // Tell the connection to connect to the client.
+                        m_activeConnections.at(newId)->ConnectToClient(newId);
+
+                        std::cout << "[" << newId << "] Connection Approved\n";
+
+                    } else {
+                        std::cout << "[------] Connection Denied\n";
+                    }
+
+                } else {
+                    std::cout << "[SERVER] New Connection Error: " << ec.message() << "\n";
+                }
+
+                // No matter what happens, make sure the asio context still has more work.
+                WaitForClientConnection();
+            }
+        );
+    }
 };
 
 } // namespace tcp

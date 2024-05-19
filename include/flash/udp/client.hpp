@@ -1,10 +1,10 @@
-#ifndef TCP_CLIENT_HPP
-#define TCP_CLIENT_HPP
+#ifndef UDP_CLIENT_HPP
+#define UDP_CLIENT_HPP
 
 /**
  * @file client.hpp
  * 
- * Client class that wraps asio networking code using TCP.
+ * Client class that wraps asio networking code using UDP.
  */
 
 #include <boost/asio.hpp>
@@ -14,11 +14,11 @@
 #include <flash/message.hpp>
 #include <flash/ts_deque.hpp>
 
-#include <flash/tcp/connection.hpp>
+#include <flash/udp/connection.hpp>
 
 namespace flash {
 
-namespace tcp {
+namespace udp {
 
 /**
  * Client class that handles connection to the server.
@@ -57,14 +57,14 @@ public:
     bool Connect(const std::string& host, const uint16_t port) {
         try {
             // Resolve the host name and port number into a list of endpoints to try.
-            boost::asio::ip::tcp::resolver resolver { m_asioContext };
-            boost::asio::ip::tcp::resolver::results_type endpoints = resolver.resolve(host, std::to_string(port));
+            boost::asio::ip::udp::resolver resolver(m_asioContext);
+            boost::asio::ip::udp::resolver::results_type endpoints = resolver.resolve(host, std::to_string(port));
 
             // Create a client connection with a new socket.
             m_connection = std::make_unique<connection<T>>(
                 connection<T>::owner::client,
                 m_asioContext,                               // Provide the connection with the surrounding asio context.
-                boost::asio::ip::tcp::socket(m_asioContext), // Create a new socket.
+                boost::asio::ip::udp::socket(m_asioContext), // Create a new socket.
                 m_qMessagesIn                                // Reference to the client's incoming message queue.
             );
 
@@ -141,7 +141,7 @@ private:
     ts_deque<tagged_message<T>> m_qMessagesIn;
 };
 
-} // namespace tcp
+} // namespace udp
 
 } // namespace flash
 

@@ -1,5 +1,5 @@
-#ifndef CONNECTION_HPP
-#define CONNECTION_HPP
+#ifndef TCP_CONNECTION_HPP
+#define TCP_CONNECTION_HPP
 
 /**
  * @file connection.hpp

@@ -5,6 +5,10 @@
 #include <flash/tcp/connection.hpp>
 #include <flash/tcp/server.hpp>
 
+// #include <flash/udp/client.hpp>
+// #include <flash/udp/connection.hpp>
+// #include <flash/udp/server.hpp>
+
 #include "CustomMsgTypes.hpp"
 
 class CustomServer : public flash::tcp::server<CustomMsgTypes> {
@@ -23,22 +27,17 @@ protected:
         std::cout << "[" << clientId << "] Disconnected.\n";
         flash::message<CustomMsgTypes> msg { CustomMsgTypes::ClientDisconnect };
         msg << clientId;
-        std::cout << "Sending message to all clients.\n";
         MessageAllClients(std::move(msg));
     }
 
     void OnMessage(flash::UserId clientId, flash::message<CustomMsgTypes>&& msg) override {
         switch (msg.m_header.m_type) {
         case CustomMsgTypes::ServerPing: {
-            std::cout << "[" << clientId << "] Server Ping\n";
-
             // Simply bounce the message back to the client.
             MessageClient(clientId, std::move(msg));
         }
         break;
         case CustomMsgTypes::MessageAll: {
-            std::cout << "[" << clientId << "] Message All\n";
-
             // Simply bounce the message back to all clients, except sender.
             MessageAllClients(std::move(msg), clientId);
         }
