@@ -14,6 +14,7 @@
 
 #include <boost/asio.hpp>
 
+#include <chrono>
 #include <memory>
 
 namespace flash {
@@ -47,7 +48,16 @@ public:
      * @param qMessagesIn a reference to the queue to deposit incoming messages into.
     */
     connection(owner ownerType, boost::asio::io_context& asioContext, boost::asio::ip::tcp::socket&& socket, ts_deque<tagged_message<T>>& qMessagesIn)
-        : m_ownerType { ownerType }, m_asioContext { asioContext }, m_socket { std::move(socket) }, m_qMessagesIn { qMessagesIn } { }
+        : m_ownerType { ownerType }, m_asioContext { asioContext }, m_socket { std::move(socket) }, m_qMessagesIn { qMessagesIn } {
+
+        if (m_ownerType == owner::server) {
+            // Server needs to generate random data for client to validate on.
+            m_handshakeOut = Scramble(uint64_t(std::chrono::system_clock::now().time_since_epoch().count()));
+
+            // What the client should return to us during the handshake.
+            m_handshakeCheck = Scramble(m_handshakeOut);
+        }
+    }
 
     virtual ~connection() { }
 
@@ -80,8 +90,11 @@ public:
             // Set the ID of this connection to a client.
             m_id = uid;
 
-            // Start waiting for message headers.
-            ReadHeader();
+            // Send the validation challenge to the client.
+            WriteValidation();
+
+            // Wait asynchronously or the client to respond.
+            ReadValidation();
         }
     }
 
@@ -100,8 +113,8 @@ public:
                 if (!ec) {
                     m_id = 0;
                     
-                    // Start waiting for message headers.
-                    ReadHeader();
+                    // Wait for the validation challenge from the server.
+                    ReadValidation();
 
                 } else {
                     std::cout << "Connect to server failed: " << ec.message() << '\n';
@@ -173,7 +186,58 @@ protected:
     /// Temporary message to hold incoming message data, initialized with empty body and header type 0.
     message<T> m_msgTemporaryIn { static_cast<T>(0) };
 
+    uint64_t m_handshakeOut { 0 };
+    uint64_t m_handshakeIn { 0 };
+    uint64_t m_handshakeCheck { 0 };
+
 private:
+    /**
+     * Asynchronous task for the asio context, reading a validation challenge or response.
+    */
+    void ReadValidation() {
+        boost::asio::async_read(m_socket, boost::asio::buffer(&m_handshakeIn, sizeof(uint64_t)),
+            [this](std::error_code ec, std::size_t length) {
+                if (!ec) {
+                    if (m_ownerType == owner::server) {
+                        // Server has received the validation data, should check it and then wait for messages.
+                        if (m_handshakeIn == m_handshakeCheck) {
+                            std::cout << "Client Validated.\n";
+
+                            ReadHeader();
+                        }
+
+                    } else {
+                        // Client has received the validation data, should send the response.
+                        m_handshakeOut = Scramble(m_handshakeIn);
+                        WriteValidation();
+                    }
+
+                } else {
+                    m_socket.close();
+                }
+            }
+        );
+    }
+
+    /**
+     * Asynchronous task for the asio context, writing a validation challenge or response.
+    */
+    void WriteValidation() {
+        boost::asio::async_write(m_socket, boost::asio::buffer(&m_handshakeOut, sizeof(uint64_t)),
+            [this](std::error_code ec, std::size_t length) {
+                if (!ec) {
+                    if (m_ownerType == owner::client) {
+                        // Client has sent the validation data, should just wait for messages (or closure)
+                        ReadHeader();
+                    }
+
+                } else {
+                    m_socket.close();
+                }
+            }
+        );
+    }
+
     /**
      * Asynchronous task for the asio context, waiting to read a message header of appropriate size.
     */
@@ -284,6 +348,26 @@ private:
 
         // Need to keep the asio context busy.
         ReadHeader();
+    }
+
+    /**
+     * Mixes 64 bits into 32 bits with improved entropy.
+    */
+    static uint32_t MixBits(uint64_t x) {
+        uint32_t xor_shifted = ((x >> 18u) ^ x) >> 27u;
+        uint32_t rot = x >> 59u;
+        uint32_t res = (xor_shifted >> rot) | (xor_shifted << ((-rot) & 31));
+        return res ^ 0x12345678;
+    }
+
+    /**
+     * Scrambles the input using a rather random function.
+    */
+    static uint64_t Scramble(uint64_t input) {
+        static constexpr uint64_t LARGE_PRIME = 6364136223846793005ULL;
+        static constexpr uint64_t OFFSET      = 000'001'000;  // Encodes the version of the protocol.
+
+        return (static_cast<uint64_t>(MixBits(input)) << 32) | static_cast<uint64_t>(MixBits(input * LARGE_PRIME + OFFSET));
     }
 };
 
