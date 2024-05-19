@@ -8,6 +8,7 @@
  * e.g. for storing messages waiting to be processed.
 */
 
+#include <condition_variable>
 #include <deque>
 #include <mutex>
 
@@ -35,7 +36,7 @@ public:
      * @returns Whether the deque is empty.
     */
     bool empty() const {
-        std::scoped_lock lock { m_mutex };
+        std::scoped_lock lock { m_dequeMux };
         return m_deque.empty();
     }
 
@@ -43,7 +44,7 @@ public:
      * @returns The size of the deque.
     */
     size_t size() const {
-        std::scoped_lock lock { m_mutex };
+        std::scoped_lock lock { m_dequeMux };
         return m_deque.size();
     }
 
@@ -51,7 +52,7 @@ public:
      * Clears the deque.
     */
     void clear() {
-        std::scoped_lock lock { m_mutex };
+        std::scoped_lock lock { m_dequeMux };
         m_deque.clear();
     }
 
@@ -61,7 +62,7 @@ public:
      * @note Undefined behavior if the deque is empty.
     */
     const T& back() {
-        std::scoped_lock lock { m_mutex };
+        std::scoped_lock lock { m_dequeMux };
         return m_deque.back();
     }
     
@@ -71,7 +72,7 @@ public:
      * @note Undefined behavior if the deque is empty.
     */
     const T& front() {
-        std::scoped_lock lock { m_mutex };
+        std::scoped_lock lock { m_dequeMux };
         return m_deque.front();
     }
 
@@ -87,16 +88,22 @@ public:
      * in both r-values and moved l-values.
     */
     void push_back(T&& value) {
-        std::scoped_lock lock { m_mutex };
+        std::scoped_lock lock { m_dequeMux };
         m_deque.emplace_back(std::move(value));
+
+        std::unique_lock<std::mutex> ul { m_blockingMux };
+        m_blocking.notify_one();
     }
 
     /**
      * Moves and pushes an element to the front of the deque, extending it.
     */
     void push_front(T&& value) {
-        std::scoped_lock lock { m_mutex };
+        std::scoped_lock lock { m_dequeMux };
         m_deque.emplace_front(std::move(value));
+
+        std::unique_lock<std::mutex> ul { m_blockingMux };
+        m_blocking.notify_one();
     }    
 
     /**
@@ -107,7 +114,7 @@ public:
      * @note If the deque is empty, results in undefined behavior.
     */
     T pop_front() {
-        std::scoped_lock lock { m_mutex };
+        std::scoped_lock lock { m_dequeMux };
         T value = std::move(m_deque.front());
         m_deque.pop_front();
         return value;
@@ -121,18 +128,35 @@ public:
      * @note If the deque is empty, results in undefined behavior.
     */
     T pop_back() {
-        std::scoped_lock lock { m_mutex };
+        std::scoped_lock lock { m_dequeMux };
         T value = std::move(m_deque.back());
         m_deque.pop_back();
         return value;
     }
 
+    /**
+     * Blocks the current thread until the deque is no longer empty.
+    */
+    void wait() {
+        // While loop to handle spurious wake-ups.
+        while (empty()) {
+            std::unique_lock<std::mutex> ul { m_blockingMux };
+            m_blocking.wait(ul);
+        }
+    }
+
 protected:
     /// Lock around the deque, mutable to allow const functions to lock.
-    mutable std::mutex m_mutex;
+    mutable std::mutex m_dequeMux;
 
     /// The underlying double-ended queue holding the data.
     std::deque<T> m_deque;
+
+    /// Lock around the blocking condition variable.
+    std::mutex m_blockingMux;
+
+    /// Condition variable to block the thread until the deque is no longer empty.
+    std::condition_variable m_blocking;
 };
 
 } // namespace flash

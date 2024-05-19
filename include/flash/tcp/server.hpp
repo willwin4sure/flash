@@ -146,12 +146,18 @@ public:
      * Process messages from the incoming message queue, optionally up to a maximum number.
      * 
      * @note that the default is to process the maximum unsigned integer.
+     * 
+     * @param maxMessages the maximum number of messages to process.
+     * @param wait whether to wait for messages to arrive by sleeping.
     */
-    void Update(size_t maxMessages = -1) {
+    void Update(size_t maxMessages = -1, bool wait = false) {
+        // Wait until something is deposited into the queue.
+        if (wait) m_qMessagesin.wait();
+
         size_t messageCount = 0;
         while (messageCount < maxMessages && !m_qMessagesin.empty()) {
+            // A tagged message has arrived, so we process it.
             auto tagged_msg = m_qMessagesin.pop_front();
-
             OnMessage(tagged_msg.m_remote, std::move(tagged_msg.m_msg));
         }
     }
