@@ -7,10 +7,10 @@
  * Server class that wraps asio networking code using TCP.
  */
 
-#include "message.hpp"
-#include "ts_deque.hpp"
+#include <flash/message.hpp>
+#include <flash/ts_deque.hpp>
 
-#include "tcp/connection.hpp"
+#include <flash/tcp/connection.hpp>
 
 #include <iostream>
 
