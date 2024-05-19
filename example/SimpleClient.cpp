@@ -42,11 +42,13 @@ int main(int argc, char** argv) {
         if (GetKeyState('0' + clientNum) & 0x8000) {
             if (GetKeyState('P') & 0x8000) {
                 Sleep(1000);
+                std::cout << "Ping Server" << std::endl;
                 c.PingServer();
             }
 
             if (GetKeyState('A') & 0x8000) {
                 Sleep(1000);
+                std::cout << "Send to all" << std::endl;
                 c.SendToAll();
             }
         }
@@ -62,11 +64,11 @@ int main(int argc, char** argv) {
                     std::chrono::system_clock::time_point timeThen;
                     msg >> timeThen;
 
-                    std::cout << "Ping: " << std::chrono::duration<double>(timeNow - timeThen).count() << "s\n";
+                    std::cout << "Ping: " << std::chrono::duration<double>(timeNow - timeThen).count() << "s" << std::endl;
                 }
                 break;
                 case CustomMsgTypes::MessageAll: {
-                    std::cout << "Server: Message to all\n";
+                    std::cout << "Server: Message to all" << std::endl;
                 }
                 break;
                 case CustomMsgTypes::ClientDisconnect: {
@@ -74,14 +76,14 @@ int main(int argc, char** argv) {
                     uint32_t clientId;
                     msg >> clientId;
 
-                    std::cout << "Client [" << clientId << "] Disconnected.\n";
+                    std::cout << "Client [" << clientId << "] Disconnected." << std::endl;
                 }
                 break;
                 }
             }
 
         } else {
-            std::cout << "Server Down\n";
+            std::cout << "Server Down" << std::endl;
             quit = true;
         }
     }

@@ -170,7 +170,7 @@ protected:
     /// why we have to tag the messages with the connection they came from.
     ts_deque<tagged_message<T>>& m_qMessagesIn;
 
-    /// Temporary message to hold incoming message data, initialized with garbage.
+    /// Temporary message to hold incoming message data, initialized with empty body and header type 0.
     message<T> m_msgTemporaryIn { static_cast<T>(0) };
 
 private:
@@ -182,9 +182,12 @@ private:
         boost::asio::async_read(m_socket, boost::asio::buffer(&m_msgTemporaryIn.m_header, sizeof(header<T>)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
+                    // Resize the temporary body to the right size. Crucial if the body is empty now
+                    // and you need to clear the old temporary!
+                    m_msgTemporaryIn.m_body.resize(m_msgTemporaryIn.m_header.m_size);
+
                     if (m_msgTemporaryIn.m_header.m_size > 0) {
-                        // If the message has a body, resize the body to fit the message and wait for it.
-                        m_msgTemporaryIn.m_body.resize(m_msgTemporaryIn.m_header.m_size);
+                        // If the message has a body, wait for it.
                         ReadBody();
 
                     } else {

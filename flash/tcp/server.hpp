@@ -166,7 +166,7 @@ public:
             if (client && client->IsConnected()) {
                 message<T> msgCopy = msg;
                 client->Send(std::move(msgCopy));
-                
+
             } else {
                 // If the client socket is no longer valid, assume that the client has disconnected.
                 disconnectedClients.push_back(id);
