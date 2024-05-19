@@ -36,8 +36,7 @@ public:
      * Constructor for the server. Sets up the acceptor to listen for incoming connections.
     */
     server(uint16_t port) 
-        : m_asioAcceptor(m_asioContext, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port)) {
-    }
+        : m_asioAcceptor(m_asioContext, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port)) { }
 
     /**
      * Virtual destructor for the server. Stops the server if it is still running.
@@ -62,11 +61,11 @@ public:
 
         } catch (std::exception& e) {
             // Something prohibited the server from starting, print the error.
-            std::cout << "[SERVER] Exception: " << e.what() << '\n';
+            std::cerr << "[SERVER] Startup Exception: " << e.what() << std::endl;
             return false;
         }
 
-        std::cout << "[SERVER] Started!\n";
+        std::cout << "[SERVER] Started!" << std::endl;
         return true;
     }
 
@@ -102,7 +101,7 @@ public:
                         m_qMessagesin      // Reference to the server's incoming message queue.
                     );
 
-                    // Give the user a chance to deny connection by overriding OnClientConnect.
+                    // Give the custom server a chance to deny connection by overriding OnClientConnect.
                     if (OnClientConnect(new_connection->GetSocket())) {
                         // Assign a unique ID to this connection.
                         UserId newId = m_uidCounter++;
@@ -157,7 +156,7 @@ public:
      * 
      * If any client is not connected, they are removed from the server's active connections.
     */
-    void MessageAllClients(const message<T>& msg, UserId ignoreClient = -1) {
+    void MessageAllClients(message<T>&& msg, UserId ignoreClient = -1) {
         std::vector<UserId> disconnectedClients;
 
         for (auto& [id, client] : m_activeConnections) {

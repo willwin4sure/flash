@@ -24,7 +24,7 @@ protected:
         flash::message<CustomMsgTypes> msg { CustomMsgTypes::ClientDisconnect };
         msg << clientId;
         std::cout << "Sending message to all clients.\n";
-        MessageAllClients(msg);
+        MessageAllClients(std::move(msg));
     }
 
     void OnMessage(flash::UserId clientId, flash::message<CustomMsgTypes>&& msg) override {
@@ -40,7 +40,7 @@ protected:
             std::cout << "[" << clientId << "] Message All\n";
 
             // Simply bounce the message back to all clients, except sender.
-            MessageAllClients(msg, clientId);
+            MessageAllClients(std::move(msg), clientId);
         }
         }
     }
