@@ -21,6 +21,9 @@ namespace flash {
 
 namespace tcp {
 
+template <typename T>
+class server;
+
 /**
  * Connection class that represents a connection between a client and a server,
  * owned by one of the sides.
@@ -82,7 +85,7 @@ public:
      * 
      * @param uid the ID of the client to connect to.
     */
-    void ConnectToClient(UserId uid = 0) {
+    void ConnectToClient(UserId uid = 0, server<T>* server = nullptr) {
         // Only the server should connect to clients.
         if (m_ownerType != owner::server) return;
 
@@ -93,10 +96,8 @@ public:
             // Send the validation challenge to the client.
             WriteValidation();
 
-            std::cout << "sent validation" << std::endl;
-
             // Wait asynchronously or the client to respond.
-            ReadValidation();
+            ReadValidation(server);
         }
     }
 
@@ -196,14 +197,16 @@ private:
     /**
      * Asynchronous task for the asio context, reading a validation challenge or response.
     */
-    void ReadValidation() {
+    void ReadValidation(server<T>* server = nullptr) {
         boost::asio::async_read(m_socket, boost::asio::buffer(&m_handshakeIn, sizeof(uint64_t)),
-            [this](std::error_code ec, std::size_t length) {
+            [this, server](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     if (m_ownerType == owner::server) {
                         // Server has received the validation data, should check it and then wait for messages.
                         if (m_handshakeIn == m_handshakeCheck) {
                             std::cout << "Client Validated.\n";
+
+                            if (server) server->OnClientValidate(m_id);
 
                             ReadHeader();
                             

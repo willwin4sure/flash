@@ -23,6 +23,10 @@ protected:
         return true;
     }
 
+    void OnClientValidate(flash::UserId clientId) override {
+        
+    }
+
     void OnClientDisconnect(flash::UserId clientId) override {
         std::cout << "[" << clientId << "] Disconnected.\n";
         flash::message<CustomMsgTypes> msg { CustomMsgTypes::ClientDisconnect };

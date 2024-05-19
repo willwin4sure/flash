@@ -172,6 +172,13 @@ protected:
     virtual bool OnClientConnect(const boost::asio::ip::tcp::socket& socket) = 0;
 
     /**
+     * Called when a client is validated by the simple scramble check.
+     * 
+     * Must be overridden by derived class to handle validation.
+    */
+    virtual void OnClientValidate(UserId clientId) = 0;
+
+    /**
      * Called when a client appears to have disconnected.
      * Can be used to remove the user from the game state.
      * 
@@ -206,6 +213,8 @@ protected:
     /// Six digits for pretty printing with "SERVER".
     UserId m_uidCounter = 100000;
 
+    friend class connection<T>;
+
 private:
     /**
      * Asynchronous task for the asio context thread, waiting for a client to connect.
@@ -235,7 +244,7 @@ private:
                         m_activeConnections.emplace(newId, std::move(new_connection));
 
                         // Tell the connection to connect to the client.
-                        m_activeConnections.at(newId)->ConnectToClient(newId);
+                        m_activeConnections.at(newId)->ConnectToClient(newId, this);
 
                         std::cout << "[" << newId << "] Connection Approved\n";
 
