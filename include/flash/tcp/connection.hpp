@@ -93,6 +93,8 @@ public:
             // Send the validation challenge to the client.
             WriteValidation();
 
+            std::cout << "sent validation" << std::endl;
+
             // Wait asynchronously or the client to respond.
             ReadValidation();
         }
@@ -204,6 +206,10 @@ private:
                             std::cout << "Client Validated.\n";
 
                             ReadHeader();
+                            
+                        } else {
+                            std::cout << "Client Disconnected (Failed Validation).\n";
+                            m_socket.close();
                         }
 
                     } else {
