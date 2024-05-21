@@ -9,6 +9,8 @@
 
 #include <flash/message.hpp>
 #include <flash/ts_deque.hpp>
+#include <flash/iserver.hpp>
+#include <flash/iserverext.hpp>
 
 #include <flash/tcp/connection.hpp>
 
@@ -30,7 +32,7 @@ namespace tcp {
  * @tparam T the message type to send and receive.
 */
 template <typename T>
-class server {
+class server : public iserver<T>, protected iserverext<T> {
 public:
     /**
      * Constructor for the server. Sets up the acceptor to listen for incoming connections.
@@ -50,7 +52,7 @@ public:
      * 
      * @returns Whether the server started successfully.
     */
-    bool Start() {
+    bool Start() final {
         if (m_threadContext.joinable() && !m_asioContext.stopped()) {
             std::cout << "[SERVER] Already running!\n";
             return false;
@@ -77,7 +79,7 @@ public:
     /**
      * Stop the server. Request the context to close, and then wait on the thread to join it.
     */
-    void Stop() {
+    void Stop() final {
         // Request the context to close.
         m_asioContext.stop();
 
@@ -97,7 +99,7 @@ public:
      * @note that this is the only way we can tell if a client has disconnected,
      * as we don't receive an explicit notification of such a fact.
     */
-    void MessageClient(UserId clientId, message<T>&& msg) {
+    void MessageClient(UserId clientId, message<T>&& msg) final {
         // Find the client in the active connections.
         auto client = m_activeConnections.find(clientId);
         
@@ -117,7 +119,7 @@ public:
      * 
      * If any client is not connected, they are removed from the server's active connections.
     */
-    void MessageAllClients(message<T>&& msg, UserId ignoreClient = -1) {
+    void MessageAllClients(message<T>&& msg, UserId ignoreClient = INVALID_USER_ID) final {
         std::vector<UserId> disconnectedClients;
 
         for (auto& [id, client] : m_activeConnections) {
@@ -150,7 +152,7 @@ public:
      * @param maxMessages the maximum number of messages to process.
      * @param wait whether to wait for messages to arrive by sleeping.
     */
-    void Update(size_t maxMessages = -1, bool wait = false) {
+    void Update(size_t maxMessages = -1, bool wait = false) final {
         // Wait until something is deposited into the queue.
         if (wait) m_qMessagesin.wait();
 
@@ -169,14 +171,14 @@ protected:
      * 
      * Must be overridden by derived class to accept any connections.
     */
-    virtual bool OnClientConnect(const boost::asio::ip::tcp::socket& socket) = 0;
+    bool OnClientConnect(const boost::asio::socket_base& socket) override = 0;
 
     /**
      * Called when a client is validated by the simple scramble check.
      * 
      * Must be overridden by derived class to handle validation.
     */
-    virtual void OnClientValidate(UserId clientId) = 0;
+    void OnClientValidate(UserId clientId) override = 0;
 
     /**
      * Called when a client appears to have disconnected.
@@ -184,7 +186,7 @@ protected:
      * 
      * Must be overriden by derived class to handle disconnections.
     */
-    virtual void OnClientDisconnect(UserId clientId) = 0;
+    void OnClientDisconnect(UserId clientId) override = 0;
 
     /**
      * Called when a message is received from a client,
@@ -192,7 +194,7 @@ protected:
      * 
      * Must be overriden by derived class to handle messages.
     */
-    virtual void OnMessage(UserId clientId, message<T>&& msg) = 0;
+    void OnMessage(UserId clientId, message<T>&& msg) override = 0;
 
     /// Thread-safe deque for incoming message packets; we own it.
     ts_deque<tagged_message<T>> m_qMessagesin;

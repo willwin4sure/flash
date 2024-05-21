@@ -4,7 +4,7 @@
 /**
  * @file client.hpp
  * 
- * Client class that wraps asio networking code using TCP.
+ * Client class that wraps asio networking code that uses the TCP protocol.
  */
 
 #include <boost/asio.hpp>
@@ -13,6 +13,7 @@
 
 #include <flash/message.hpp>
 #include <flash/ts_deque.hpp>
+#include <flash/iclient.hpp>
 
 #include <flash/tcp/connection.hpp>
 
@@ -31,7 +32,7 @@ namespace tcp {
  * @tparam T the message type to send and receive.
 */
 template <typename T>
-class client {
+class client : public iclient<T> {
 public:
 
     /**
@@ -54,7 +55,7 @@ public:
      * 
      * @returns Whether the connection was successful.
     */
-    bool Connect(const std::string& host, const uint16_t port) {
+    bool Connect(const std::string& host, const uint16_t port) final {
         try {
             // Resolve the host name and port number into a list of endpoints to try.
             boost::asio::ip::tcp::resolver resolver { m_asioContext };
@@ -88,7 +89,7 @@ public:
      * Stops the asio context and joins the context thread,
      * also releases the unique pointer to the connection.
     */
-    void Disconnect() {
+    void Disconnect() final {
         if (IsConnected()) {
             m_connection->Disconnect();
         }
@@ -104,7 +105,7 @@ public:
     /**
      * @returns Whether the client is connected to the server.
     */
-    bool IsConnected() {
+    bool IsConnected() final {
         return m_connection && m_connection->IsConnected();
     }
 
@@ -113,7 +114,7 @@ public:
      * 
      * @param msg the message to send.
     */
-    void Send(message<T>&& msg) {
+    void Send(message<T>&& msg) final {
         if (IsConnected()) {
             m_connection->Send(std::move(msg));
         }
@@ -122,7 +123,7 @@ public:
     /**
      * Returns a reference to the incoming message queue.
     */
-    ts_deque<tagged_message<T>>& Incoming() {
+    ts_deque<tagged_message<T>>& Incoming() final {
         return m_qMessagesIn;
     }
 

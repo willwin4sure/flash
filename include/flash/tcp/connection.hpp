@@ -6,11 +6,14 @@
  * 
  * Contains class that represents a TCP connection between a client and a server.
  * Abstracts away asio and asynchronous operations: the interface is just
- * a send operation for outgoing messages and a thread-safe queue of incoming messages.
+ * a send operation for outgoing messages and providing a thread-safe queue
+ * to place the incoming messages.
 */
 
 #include <flash/message.hpp>
 #include <flash/ts_deque.hpp>
+
+#include <flash/iserverext.hpp>
 
 #include <boost/asio.hpp>
 
@@ -21,9 +24,6 @@ namespace flash {
 
 namespace tcp {
 
-template <typename T>
-class server;
-
 /**
  * Connection class that represents a connection between a client and a server,
  * owned by one of the sides.
@@ -33,7 +33,6 @@ class server;
 template <typename T>
 class connection {
 public:
-
     /**
      * The type of the connection owner. Behavior is slightly different depending on the owner.
     */
@@ -45,9 +44,9 @@ public:
     /**
      * Constructor for the connection. Sets up the connection with the given parameters.
      * 
-     * @param ownerType the owner of the connection.
+     * @param ownerType   the owner of the connection.
      * @param asioContext a reference to the asio context that the connection will run on.
-     * @param socket the socket that the connection will use.
+     * @param socket      the socket that the connection will use.
      * @param qMessagesIn a reference to the queue to deposit incoming messages into.
     */
     connection(owner ownerType, boost::asio::io_context& asioContext, boost::asio::ip::tcp::socket&& socket, ts_deque<tagged_message<T>>& qMessagesIn)
@@ -66,8 +65,9 @@ public:
 
     /**
      * @returns The ID of the other side of the connection.
-     * This should be 0 if the owner is a client (since it is a connection to the server)
-     * and the ID of the client is the owner is a server (since it is the connection to some client)
+     * 
+     * This should be 0 if the owner is a client (since it is a connection to the server),
+     * or the ID of the client is the owner is a server (since it is the connection to some client).
     */
     UserId GetId() const { return m_id; }
 
@@ -77,26 +77,26 @@ public:
     const boost::asio::ip::tcp::socket& GetSocket() { return m_socket; }
 
     /**
-     * Turns the connection on by connecting it to a client,
-     * and prompting it to continuously read header messages from the socket.
+     * Turns the connection on by connecting it to a client, prompting it
+     * to complete validation checks, and then continuously read header
+     * messages from the socket.
      * 
      * In order for this to do any work, the socket that we got
-     * from the client connecting must be placed in this object and open.
+     * from the connecting client must be placed in this object and open.
      * 
      * @param uid the ID of the client to connect to.
     */
-    void ConnectToClient(UserId uid = 0, server<T>* server = nullptr) {
+    void ConnectToClient(UserId uid, iserverext<T>* server = nullptr) {
         // Only the server should connect to clients.
         if (m_ownerType != owner::server) return;
 
         if (m_socket.is_open()) {
-            // Set the ID of this connection to a client.
             m_id = uid;
 
             // Send the validation challenge to the client.
             WriteValidation();
 
-            // Wait asynchronously or the client to respond.
+            // Wait asynchronously for the client to respond.
             ReadValidation(server);
         }
     }
@@ -114,7 +114,7 @@ public:
         boost::asio::async_connect(m_socket, endpoints,
             [this](std::error_code ec, boost::asio::ip::tcp::endpoint endpoint) {
                 if (!ec) {
-                    m_id = 0;
+                    m_id = SERVER_USER_ID;
                     
                     // Wait for the validation challenge from the server.
                     ReadValidation();
@@ -169,8 +169,8 @@ protected:
     /// Type of the connection owner.
     owner m_ownerType { owner::server };
 
-    /// Identifier of the connection, initialized to max value and set when connected.
-    UserId m_id { static_cast<UserId>(-1) };
+    /// Identifier of the remote side of the connection.
+    UserId m_id { INVALID_USER_ID };
 
     /// Each connection has a unique socket that is connected to a remote; we own it.
     boost::asio::ip::tcp::socket m_socket;
@@ -197,14 +197,14 @@ private:
     /**
      * Asynchronous task for the asio context, reading a validation challenge or response.
     */
-    void ReadValidation(server<T>* server = nullptr) {
+    void ReadValidation(iserverext<T>* server = nullptr) {
         boost::asio::async_read(m_socket, boost::asio::buffer(&m_handshakeIn, sizeof(uint64_t)),
             [this, server](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     if (m_ownerType == owner::server) {
                         // Server has received the validation data, should check it and then wait for messages.
                         if (m_handshakeIn == m_handshakeCheck) {
-                            std::cout << "Client Validated.\n";
+                            std::cout << "[" << m_id << "] Client Validated.\n";
 
                             if (server) server->OnClientValidate(m_id);
 
@@ -252,14 +252,14 @@ private:
     */
     void ReadHeader() {
         // Tell asio to wait for the header to fill the buffer and then run a callback.
-        boost::asio::async_read(m_socket, boost::asio::buffer(&m_msgTemporaryIn.m_header, sizeof(header<T>)),
+        boost::asio::async_read(m_socket, boost::asio::buffer(&m_msgTemporaryIn.get_header(), sizeof(header<T>)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     // Resize the temporary body to the right size. Crucial if the body is empty now
                     // and you need to clear the old temporary!
-                    m_msgTemporaryIn.m_body.resize(m_msgTemporaryIn.m_header.m_size);
+                    m_msgTemporaryIn.get_body().resize(m_msgTemporaryIn.get_header().m_size);
 
-                    if (m_msgTemporaryIn.m_header.m_size > 0) {
+                    if (m_msgTemporaryIn.get_header().m_size > 0) {
                         // If the message has a body, wait for it.
                         ReadBody();
 
@@ -281,7 +281,7 @@ private:
     */
     void ReadBody() {
         // Tell asio to wait for the body to fill the buffer and then run a callback.
-        boost::asio::async_read(m_socket, boost::asio::buffer(m_msgTemporaryIn.m_body.data(), m_msgTemporaryIn.m_body.size()),
+        boost::asio::async_read(m_socket, boost::asio::buffer(m_msgTemporaryIn.get_body().data(), m_msgTemporaryIn.get_body().size()),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     // Header and body have both been read, so add the message to incoming queue.
@@ -300,10 +300,10 @@ private:
     */
     void WriteHeader() {
         // Tell asio to wait for the header to be written and then run a callback.
-        boost::asio::async_write(m_socket, boost::asio::buffer(&m_qMessagesOut.front().m_header, sizeof(header<T>)),
+        boost::asio::async_write(m_socket, boost::asio::buffer(&m_qMessagesOut.front().get_header(), sizeof(header<T>)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
-                    if (m_qMessagesOut.front().m_body.size() > 0) {
+                    if (m_qMessagesOut.front().get_body().size() > 0) {
                         // If the message has a body, write it as well.
                         WriteBody();
 
@@ -330,7 +330,7 @@ private:
     */
     void WriteBody() {
         // Tell asio to wait for the body to be written and then run a callback.
-        boost::asio::async_write(m_socket, boost::asio::buffer(m_qMessagesOut.front().m_body.data(), m_qMessagesOut.front().m_body.size()),
+        boost::asio::async_write(m_socket, boost::asio::buffer(m_qMessagesOut.front().get_body().data(), m_qMessagesOut.front().get_body().size()),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     // The header and body have both be written, so remove from the queue.
@@ -363,6 +363,7 @@ private:
      * Mixes 64 bits into 32 bits with improved entropy.
     */
     static uint32_t MixBits(uint64_t x) {
+        x = x ^ 0xa0b1c2d3;
         uint32_t xor_shifted = ((x >> 18u) ^ x) >> 27u;
         uint32_t rot = x >> 59u;
         uint32_t res = (xor_shifted >> rot) | (xor_shifted << ((-rot) & 31));
@@ -376,7 +377,7 @@ private:
         static constexpr uint64_t LARGE_PRIME = 6364136223846793005ULL;
         static constexpr uint64_t OFFSET      = 000'001'000;  // Encodes the version of the protocol.
 
-        return (static_cast<uint64_t>(MixBits(input)) << 32) | static_cast<uint64_t>(MixBits(input * LARGE_PRIME + OFFSET));
+        return static_cast<uint64_t>(MixBits(static_cast<uint64_t>(MixBits(input)) * LARGE_PRIME + OFFSET)) * LARGE_PRIME + OFFSET;
     }
 };
 

@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
             if (!c.Incoming().empty()) {
                 auto msg = c.Incoming().pop_front().m_msg;
 
-                switch(msg.m_header.m_type) {
+                switch(msg.get_header().m_type) {
                 case CustomMsgTypes::ServerPing: {
                     // Server responded to a Ping request.
                     std::chrono::system_clock::time_point timeNow = std::chrono::system_clock::now();

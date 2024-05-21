@@ -17,42 +17,41 @@
 
 namespace flash {
 
-/// Type of the user ID. Id 0 to represent the server, -1 (max) to represent invalid.
-using UserId = uint32_t;
+/// Type of the user ID. Server ID is 0, Client IDs are positive integers, e.g. starting at 100000.
+using UserId = int32_t;
+
+constexpr UserId INVALID_USER_ID = -1;  // Represents some unassigned user ID.
+constexpr UserId SERVER_USER_ID = 0;    // User ID of the unique server.
+
 
 /**
- * Header that is sent at the start of every message, with a fixed size.
+ * Header struct that is sent at the start of every message, with a fixed size.
  * Contains the type of the message and the size of the message body.
  * 
  * @tparam T an enum class containing possible types of messages to be sent.
+ *         Should have an underlying type of uint32_t.
 */
 template <typename T>
 struct header {
-    /// Type of the message.
     T m_type {};
-
-    /// Size of the message body associated with this header.
-    uint32_t m_size { 0 };
+    uint32_t m_size { 0 };  // Size of the message body associated with this header.
 };
 
 
 /**
- * Message class that is used to send and receive messages over a network connection.
+ * Message struct that is used to send and receive messages over a network connection.
  * Contains both the header of the message and the body of the message.
  * 
  * Supports pushing and popping fundamental data types with the `<<` and `>>` operators.
- * For types larger than a byte, does not handle endianness, so only use byte-sized
+ * 
+ * @warning For types larger than a byte, does not handle endianness, so only use byte-sized
  * types if your machines differ in endianness. Most modern machines are little-endian.
  * 
- * @tparam T the type of the message id. Should be an enum class
- *         with underlying type of uint32_t.
+ * @tparam T an enum class containing possible types of messages to be sent.
+ *         Should have an underlying type of uint32_t.
 */
 template <typename T>
 struct message {
-
-    header<T> m_header;
-    std::vector<uint8_t> m_body;
-
     /**
      * Constructs an empty message with the given type.
     */
@@ -69,16 +68,26 @@ struct message {
     const header<T>& get_header() const { return m_header; }
 
     /**
-     * @returns A const reference to the full message body as a vector of bytes.
+     * @returns A const reference to the body of the message.
     */
     const std::vector<uint8_t>& get_body() const { return m_body; }
 
+    /**
+     * @returns A reference to the header of the message.
+    */
+    header<T>& get_header() { return m_header; }
+
+    /**
+     * @returns A reference to the body of the message.
+    */
+    std::vector<uint8_t>& get_body() { return m_body; }
+    
     /**
      * Allow easy printing of the message using `std::cout`.
     */
     friend std::ostream& operator<<(std::ostream& os, const message<T>& msg) {
         os << "Type: " << static_cast<int>(msg.m_header.m_type) << " "
-           << "Size: " << msg.m_header.m_size;
+           << "Size: " << msg.size();
         return os;
     }
 
@@ -103,11 +112,11 @@ struct message {
             "Data is too complex to be pushed into message.");
 
         // Resize the message body to fit the new data.
-        size_t idx = msg.m_body.size();
-        msg.m_body.resize(msg.m_body.size() + sizeof(U));
+        size_t sz = msg.m_body.size();
+        msg.m_body.resize(sz + sizeof(U));
 
         // Copy the data into the message body from the data.
-        std::memcpy(msg.m_body.data() + idx, &data, sizeof(U));
+        std::memcpy(msg.m_body.data() + sz, &data, sizeof(U));
         msg.m_header.m_size = msg.m_body.size();
 
         return msg;
@@ -130,25 +139,29 @@ struct message {
             "Data is too complex to be popped from message.");
 
         // Remove the size of the data being popped.
-        size_t idx = msg.m_body.size() - sizeof(U);
+        size_t sz = msg.m_body.size() - sizeof(U);
 
         // Copy the data into the variable from the message body.
-        std::memcpy(&data, msg.m_body.data() + idx, sizeof(U));
+        std::memcpy(&data, msg.m_body.data() + sz, sizeof(U));
 
         // Shrink the message body to remove the data.
-        msg.m_body.resize(idx);
+        msg.m_body.resize(sz);
         msg.m_header.m_size = msg.m_body.size();
 
         return msg;
     }
+
+private:
+    header<T> m_header;
+    std::vector<uint8_t> m_body;  // Body of message as a vector of bytes.
 };
 
 
 /**
- * Wrapper around a message that contains the client ID of the sender,
- * or 0 if the sender is the server.
+ * Wrapper around a message that contains the user ID of the sender.
  * 
  * @tparam T an enum class containing possible types of messages to be sent.
+ *         Should have an underlying type of uint32_t.
 */
 template <typename T>
 struct tagged_message {
@@ -164,10 +177,7 @@ struct tagged_message {
         return os;
     }
 
-    /// Id of the remote user, 0 for server and non-zero for clients. -1 (max) for invalid.
-    UserId m_remote { static_cast<UserId>(-1) };
-
-    /// The actual message.
+    UserId m_remote { INVALID_USER_ID };  // ID of the remote user.
     message<T> m_msg;
 };
 

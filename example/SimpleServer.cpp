@@ -18,7 +18,9 @@ public:
     }
 
 protected:
-    bool OnClientConnect(const boost::asio::ip::tcp::socket& socket) override {
+    bool OnClientConnect(const boost::asio::socket_base& socket) override {
+        static_cast<const boost::asio::ip::tcp::socket&>(socket).remote_endpoint();
+
         // Allow everyone in.
         return true;
     }
@@ -35,7 +37,7 @@ protected:
     }
 
     void OnMessage(flash::UserId clientId, flash::message<CustomMsgTypes>&& msg) override {
-        switch (msg.m_header.m_type) {
+        switch (msg.get_header().m_type) {
         case CustomMsgTypes::ServerPing: {
             // Simply bounce the message back to the client.
             MessageClient(clientId, std::move(msg));
