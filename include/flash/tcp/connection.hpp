@@ -16,6 +16,7 @@
 #include <flash/iserverext.hpp>
 
 #include <boost/asio.hpp>
+#include <boost/endian/conversion.hpp>
 
 #include <chrono>
 #include <memory>
@@ -201,6 +202,8 @@ private:
         boost::asio::async_read(m_socket, boost::asio::buffer(&m_handshakeIn, sizeof(uint64_t)),
             [this, server](std::error_code ec, std::size_t length) {
                 if (!ec) {
+                    m_handshakeIn = boost::endian::big_to_native(m_handshakeIn);
+
                     if (m_ownerType == owner::server) {
                         // Server has received the validation data, should check it and then wait for messages.
                         if (m_handshakeIn == m_handshakeCheck) {
@@ -211,7 +214,7 @@ private:
                             ReadHeader();
                             
                         } else {
-                            std::cout << "Client Disconnected (Failed Validation).\n";
+                            std::cout << "[" << m_id << "] Client Disconnected (Failed Validation).\n";
                             m_socket.close();
                         }
 
@@ -232,11 +235,13 @@ private:
      * Asynchronous task for the asio context, writing a validation challenge or response.
     */
     void WriteValidation() {
-        boost::asio::async_write(m_socket, boost::asio::buffer(&m_handshakeOut, sizeof(uint64_t)),
+        uint64_t handshakeOut = boost::endian::native_to_big(m_handshakeOut);
+
+        boost::asio::async_write(m_socket, boost::asio::buffer(&handshakeOut, sizeof(uint64_t)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     if (m_ownerType == owner::client) {
-                        // Client has sent the validation data, should just wait for messages (or closure)
+                        // We have sent the validation data, should just wait for messages (or closure)
                         ReadHeader();
                     }
 
