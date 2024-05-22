@@ -112,7 +112,8 @@ public:
         // Only the client should connect to servers.
         if (m_ownerType != owner::client) return;
 
-        boost::asio::async_connect(m_socket, endpoints,
+        boost::asio::async_connect(
+            m_socket, endpoints,
             [this](std::error_code ec, boost::asio::ip::tcp::endpoint endpoint) {
                 if (!ec) {
                     m_id = SERVER_USER_ID;
@@ -199,7 +200,8 @@ private:
      * Asynchronous task for the asio context, reading a validation challenge or response.
     */
     void ReadValidation(iserverext<T>* server = nullptr) {
-        boost::asio::async_read(m_socket, boost::asio::buffer(&m_handshakeIn, sizeof(uint64_t)),
+        boost::asio::async_read(
+            m_socket, boost::asio::buffer(&m_handshakeIn, sizeof(uint64_t)),
             [this, server](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     m_handshakeIn = boost::endian::big_to_native(m_handshakeIn);
@@ -237,7 +239,8 @@ private:
     void WriteValidation() {
         uint64_t handshakeOut = boost::endian::native_to_big(m_handshakeOut);
 
-        boost::asio::async_write(m_socket, boost::asio::buffer(&handshakeOut, sizeof(uint64_t)),
+        boost::asio::async_write(
+            m_socket, boost::asio::buffer(&handshakeOut, sizeof(uint64_t)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     if (m_ownerType == owner::client) {
@@ -257,7 +260,8 @@ private:
     */
     void ReadHeader() {
         // Tell asio to wait for the header to fill the buffer and then run a callback.
-        boost::asio::async_read(m_socket, boost::asio::buffer(&m_msgTemporaryIn.get_header(), sizeof(header<T>)),
+        boost::asio::async_read(
+            m_socket, boost::asio::buffer(&m_msgTemporaryIn.get_header(), sizeof(header<T>)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     // Resize the temporary body to the right size. Crucial if the body is empty now
@@ -286,7 +290,8 @@ private:
     */
     void ReadBody() {
         // Tell asio to wait for the body to fill the buffer and then run a callback.
-        boost::asio::async_read(m_socket, boost::asio::buffer(m_msgTemporaryIn.get_body().data(), m_msgTemporaryIn.get_body().size()),
+        boost::asio::async_read(
+            m_socket, boost::asio::buffer(m_msgTemporaryIn.get_body().data(), m_msgTemporaryIn.get_body().size()),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     // Header and body have both been read, so add the message to incoming queue.
@@ -305,7 +310,8 @@ private:
     */
     void WriteHeader() {
         // Tell asio to wait for the header to be written and then run a callback.
-        boost::asio::async_write(m_socket, boost::asio::buffer(&m_qMessagesOut.front().get_header(), sizeof(header<T>)),
+        boost::asio::async_write(
+            m_socket, boost::asio::buffer(&m_qMessagesOut.front().get_header(), sizeof(header<T>)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     if (m_qMessagesOut.front().get_body().size() > 0) {
@@ -335,7 +341,8 @@ private:
     */
     void WriteBody() {
         // Tell asio to wait for the body to be written and then run a callback.
-        boost::asio::async_write(m_socket, boost::asio::buffer(m_qMessagesOut.front().get_body().data(), m_qMessagesOut.front().get_body().size()),
+        boost::asio::async_write(
+            m_socket, boost::asio::buffer(m_qMessagesOut.front().get_body().data(), m_qMessagesOut.front().get_body().size()),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     // The header and body have both be written, so remove from the queue.
