@@ -25,3 +25,9 @@ cmake ..
 make
 ctest
 ```
+
+## Bugs
+
+Helpful links:
+
+* https://stackoverflow.com/questions/5344809/boost-asio-async-send-question

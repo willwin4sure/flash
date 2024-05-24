@@ -159,8 +159,9 @@ public:
         size_t messageCount = 0;
         while (messageCount < maxMessages && !m_qMessagesin.empty()) {
             // A tagged message has arrived, so we process it.
-            auto tagged_msg = m_qMessagesin.pop_front();
-            OnMessage(tagged_msg.m_remote, std::move(tagged_msg.m_msg));
+            auto taggedMsg = m_qMessagesin.pop_front();
+            OnMessage(taggedMsg.m_remote, std::move(taggedMsg.m_msg));
+            ++messageCount;
         }
     }
 
@@ -171,7 +172,7 @@ protected:
      * 
      * Must be overridden by derived class to accept any connections.
     */
-    bool OnClientConnect(const boost::asio::socket_base& socket) override = 0;
+    bool OnClientConnect(const boost::asio::ip::address& address) override = 0;
 
     /**
      * Called when a client is validated by the simple scramble check.
@@ -238,7 +239,7 @@ private:
                     );
 
                     // Give the custom server a chance to deny connection by overriding OnClientConnect.
-                    if (OnClientConnect(new_connection->GetSocket())) {
+                    if (OnClientConnect(new_connection->GetSocket().remote_endpoint().address())) {
                         // Assign a unique ID to this connection.
                         UserId newId = m_uidCounter++;
 

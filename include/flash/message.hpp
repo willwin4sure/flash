@@ -168,8 +168,8 @@ struct tagged_message {
     /**
      * Constructs a tagged message with the given message and sender ID.
     */
-    tagged_message(UserId remote, message<T>& msg)
-        : m_remote { remote }, m_msg { msg } { }
+    tagged_message(UserId remote, message<T>&& msg)
+        : m_remote { remote }, m_msg { std::move(msg) } { }
 
     friend std::ostream& operator<<(std::ostream& os, const tagged_message<T>& tagged_msg) {
         os << "Remote: " << tagged_msg.m_remote << " "

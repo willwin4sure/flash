@@ -25,7 +25,6 @@ public:
         const std::string& host, const uint16_t port) = 0;
 
     virtual void Disconnect() = 0;
-
     virtual bool IsConnected() = 0;
 
     virtual void Send(message<T>&& msg) = 0;

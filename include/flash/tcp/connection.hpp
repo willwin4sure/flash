@@ -11,6 +11,7 @@
 */
 
 #include <flash/message.hpp>
+#include <flash/scramble.hpp>
 #include <flash/ts_deque.hpp>
 
 #include <flash/iserverext.hpp>
@@ -55,7 +56,7 @@ public:
 
         if (m_ownerType == owner::server) {
             // Server needs to generate random data for client to validate on.
-            m_handshakeOut = Scramble(uint64_t(std::chrono::system_clock::now().time_since_epoch().count()));
+            m_handshakeOut = Scramble(uint64_t(std::chrono::steady_clock::now().time_since_epoch().count()));
 
             // What the client should return to us during the handshake.
             m_handshakeCheck = Scramble(m_handshakeOut);
@@ -150,17 +151,18 @@ public:
      * @param msg the message to send, moved in.
     */
     void Send(message<T>&& msg) {
-        boost::asio::post(m_asioContext,
+        boost::asio::post(
+            m_asioContext,
             
             // Black magic generalized lambda capture from
             // https://stackoverflow.com/questions/8640393/move-capture-in-lambda
 
             [this, msg = std::move(msg)] () mutable {
-                bool areWritingMessage = !m_qMessagesOut.empty();
+                bool writing = !m_qMessagesOut.empty();
                 m_qMessagesOut.push_back(std::move(msg));
 
                 // If writing is already occurring, no need to start the loop again.
-                if (!areWritingMessage) {
+                if (!writing) {
                     WriteHeader();
                 }
             }
@@ -365,31 +367,10 @@ private:
      * Asynchronous task for the asio context to add a message to the incoming message queue.
     */
     void AddToIncomingMessageQueue() {
-        m_qMessagesIn.push_back(tagged_message<T>{ GetId(), m_msgTemporaryIn });
+        m_qMessagesIn.push_back(tagged_message<T>{ GetId(), std::move(m_msgTemporaryIn) });
 
         // Need to keep the asio context busy.
         ReadHeader();
-    }
-
-    /**
-     * Mixes 64 bits into 32 bits with improved entropy.
-    */
-    static uint32_t MixBits(uint64_t x) {
-        x = x ^ 0xa0b1c2d3;
-        uint32_t xor_shifted = ((x >> 18u) ^ x) >> 27u;
-        uint32_t rot = x >> 59u;
-        uint32_t res = (xor_shifted >> rot) | (xor_shifted << ((-rot) & 31));
-        return res ^ 0x12345678;
-    }
-
-    /**
-     * Scrambles the input using a rather random function.
-    */
-    static uint64_t Scramble(uint64_t input) {
-        static constexpr uint64_t LARGE_PRIME = 6364136223846793005ULL;
-        static constexpr uint64_t OFFSET      = 000'001'000;  // Encodes the version of the protocol.
-
-        return static_cast<uint64_t>(MixBits(static_cast<uint64_t>(MixBits(input)) * LARGE_PRIME + OFFSET)) * LARGE_PRIME + OFFSET;
     }
 };
 

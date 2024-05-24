@@ -25,7 +25,7 @@ namespace flash {
 template <typename T>
 class iserverext {
 public:
-    virtual bool OnClientConnect(const boost::asio::socket_base& socket) = 0;
+    virtual bool OnClientConnect(const boost::asio::ip::address& address) = 0;
     virtual void OnClientValidate(UserId clientId) = 0;
     virtual void OnClientDisconnect(UserId clientId) = 0;
     virtual void OnMessage(UserId clientId, message<T>&& msg) = 0;

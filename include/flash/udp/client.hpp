@@ -8,13 +8,16 @@
  */
 
 #include <boost/asio.hpp>
+#include <boost/endian/conversion.hpp>
 
 #include <iostream>
 
 #include <flash/message.hpp>
 #include <flash/ts_deque.hpp>
+#include <flash/scramble.hpp>
+#include <flash/iclient.hpp>
 
-#include <flash/udp/connection.hpp>
+#include <flash/udp/common.hpp>
 
 namespace flash {
 
@@ -31,13 +34,13 @@ namespace udp {
  * @tparam T the message type to send and receive.
 */
 template <typename T>
-class client {
+class client : public iclient<T> {
 public:
 
-    /**
-     * Default constructor for the client.
-    */
-    client() = default;
+    client()
+        : m_socket(m_asioContext) {
+
+    }
 
     /**
      * Virtual destructor for the client; disconnects the client from the server.
@@ -54,22 +57,17 @@ public:
      * 
      * @returns Whether the connection was successful.
     */
-    bool Connect(const std::string& host, const uint16_t port) {
+    bool Connect(const std::string& host, const uint16_t port) final {
+        std::cout << "Connecting to " << host << ':' << port << '\n';
         try {
             // Resolve the host name and port number into a list of endpoints to try.
             boost::asio::ip::udp::resolver resolver(m_asioContext);
             boost::asio::ip::udp::resolver::results_type endpoints = resolver.resolve(host, std::to_string(port));
 
-            // Create a client connection with a new socket.
-            m_connection = std::make_unique<connection<T>>(
-                connection<T>::owner::client,
-                m_asioContext,                               // Provide the connection with the surrounding asio context.
-                boost::asio::ip::udp::socket(m_asioContext), // Create a new socket.
-                m_qMessagesIn                                // Reference to the client's incoming message queue.
-            );
+            m_socket = boost::asio::ip::udp::socket(m_asioContext);
 
             // Connect to the server.
-            m_connection->ConnectToServer(endpoints);
+            ConnectToServer(endpoints);
 
             // Start running the context in its own thread.
             m_threadContext = std::thread([this]() { m_asioContext.run(); });
@@ -88,24 +86,24 @@ public:
      * Stops the asio context and joins the context thread,
      * also releases the unique pointer to the connection.
     */
-    void Disconnect() {
+    void Disconnect() final {
         if (IsConnected()) {
-            m_connection->Disconnect();
+            boost::asio::post(m_asioContext, [this]() { m_socket.close(); });
         }
 
         m_asioContext.stop();
         if (m_threadContext.joinable()) {
             m_threadContext.join();
         }
-
-        m_connection.release();
     }
 
     /**
+     * Returns whether the client is connected to the server.
+     * 
      * @returns Whether the client is connected to the server.
     */
-    bool IsConnected() {
-        return m_connection && m_connection->IsConnected();
+    bool IsConnected() final {
+        return m_socket.is_open();
     }
 
     /**
@@ -113,10 +111,19 @@ public:
      * 
      * @param msg the message to send.
     */
-    void Send(message<T>&& msg) {
-        if (IsConnected()) {
-            m_connection->Send(std::move(msg));
-        }
+    void Send(message<T>&& msg) final {
+        // Add the message to the outgoing queue.
+        // m_qMessagesOut.push_back({ std::move(msg), [this](const message<T>& msg) {
+        //     // Send the message to the server.
+        //     m_socket.async_send(boost::asio::buffer(msg.m_buffer.data(), msg.m_buffer.size()),
+        //         [this](std::error_code ec, std::size_t length) {
+        //         if (!ec) {
+        //             // Message sent successfully.
+        //         } else {
+        //             std::cout << "Client Exception: " << ec.message() << '\n';
+        //         }
+        //     });
+        // } });
     }
 
     /**
@@ -130,15 +137,79 @@ protected:
     /// The asio context for the client connection.
     boost::asio::io_context m_asioContext;
 
+    boost::asio::ip::udp::socket m_socket;
+
     /// Thread for the context to execute its work commands independently.
     std::thread m_threadContext;
 
-    /// The single instance of a connection object, which handles data transfer.
-    std::unique_ptr<connection<T>> m_connection;
+    uint64_t m_handshakeIn;
 
 private:
     /// The thread-safe queue of messages from the server.
     ts_deque<tagged_message<T>> m_qMessagesIn;
+
+    ts_deque<message<T>> m_qMessagesOut;
+
+    void ConnectToServer(const boost::asio::ip::udp::resolver::results_type& endpoints) {
+        std::cout << "Connecting to server...\n";
+
+        // Send a message to the server using UDP
+        boost::asio::ip::udp::endpoint endpoint = *endpoints.begin();
+        m_socket.open(endpoint.protocol());
+        m_socket.connect(endpoint);
+
+        std::cout << "Sending connection request...\n";
+
+        // Send the magic number
+        uint64_t magicNumber = boost::endian::native_to_big(CONNECTION_REQUEST_MAGIC_NUM);
+        m_socket.async_send(boost::asio::buffer(&magicNumber, sizeof(uint64_t)),
+            [this](std::error_code ec, std::size_t length) {
+            if (!ec) {
+                std::cout << "Waiting for validation...\n";
+                // Wait for the server to send the validation.
+                HandleValidation();
+            }
+        });
+    }
+
+    void HandleValidation() {
+        std::cout << "Handling validation...\n";
+        // Wait for the handshake from the server.
+        m_socket.async_receive(boost::asio::buffer(&m_handshakeIn, sizeof(uint64_t)),
+            [this](std::error_code ec, std::size_t length) {
+            std::cout << "Received handshake: " << m_handshakeIn << '\n';
+            std::cout << "Received handshake: " << boost::endian::big_to_native(m_handshakeIn) << '\n';
+            if (!ec) {
+                uint64_t handshakeRes = boost::endian::native_to_big(Scramble(boost::endian::big_to_native(m_handshakeIn)));
+                std::cout << "Sending handshake response: " << Scramble(boost::endian::big_to_native(m_handshakeIn)) << '\n';
+
+                // Send the response back to the server.
+                m_socket.async_send(boost::asio::buffer(&handshakeRes, sizeof(uint64_t)),
+                    [this](std::error_code ec, std::size_t length) {
+                    if (!ec) {
+                        std::cout << "Connected to server.\n";
+                        // Start receiving messages from the server.
+                        // ReceiveMessages();
+                    }
+                });
+            }
+        });
+    }
+
+    // void ReceiveMessages() {
+    //     m_socket.async_receive(boost::asio::buffer(m_qMessagesIn.emplace_back().m_msg.m_buffer.data(), message<T>::header_length),
+    //         [this](std::error_code ec, std::size_t length) {
+    //         if (!ec) {
+    //             if (m_qMessagesIn.back().m_msg.decode_header()) {
+    //                 // Now we need to read the body of the message.
+    //                 ReadBody();
+    //             }
+    //         } else {
+    //             std::cout << "Client Exception: " << ec.message() << '\n';
+    //         }
+    //     });
+    // }
+
 };
 
 } // namespace udp
