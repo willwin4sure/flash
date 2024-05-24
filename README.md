@@ -1,12 +1,12 @@
 # Flash
 
-Flash is a C++ framework built for message passing in a
+C++ framework built for message passing in a
 client-server model, abstracting away complicated
 ASIO networking and multithreading.
 
-Flash is based on a [video series by javidx9]
-(https://www.youtube.com/watch?v=2hNdkYInj4g), with
-various modifications.
+Flash is based on a
+[video series by javidx9](https://www.youtube.com/watch?v=2hNdkYInj4g),
+with various modifications.
 
 ## Overview
 
