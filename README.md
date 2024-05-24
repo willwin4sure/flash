@@ -78,8 +78,7 @@ ctest
 Alternatively, you can just click the Build button with
 the CMake extension in VSCode.
 
-## Bugs
+## Helpful links
 
-Helpful links:
-
+* https://stackoverflow.com/questions/69457434/c-udp-server-io-context-running-in-thread-exits-before-work-can-start
 * https://stackoverflow.com/questions/5344809/boost-asio-async-send-question
