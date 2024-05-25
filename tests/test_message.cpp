@@ -15,7 +15,7 @@ TEST_CASE( "Message handles integers correctly in stack order with right sizes",
     msg << 1;
     msg << 2;
 
-    REQUIRE( msg.size() == 8 + 2 * sizeof(int) );
+    REQUIRE( msg.size() == sizeof(flash::header<MessageId>) + 2 * sizeof(int) );
 
     int a, b;
     msg >> b >> a;
@@ -44,7 +44,11 @@ TEST_CASE( "Messages handles floats, strings, structs, and arrays" , "[message]"
     msg << TestStruct { 1, 2 };
     msg << std::array<TestStruct, 2> {{ { 1, 2 }, { 3, 4 } }};
     
-    REQUIRE( msg.size() == 8 + sizeof(float) + 14 + 2 * sizeof(int) + 3 * sizeof(int) + 3 * sizeof(TestStruct) );
+    REQUIRE( msg.size() == sizeof(flash::header<MessageId>)
+                         + sizeof(float)
+                         + 14
+                         + 5 * sizeof(int)
+                         + 3 * sizeof(TestStruct) );
 
     float f;
     std::array<char, 14> str;
@@ -62,4 +66,46 @@ TEST_CASE( "Messages handles floats, strings, structs, and arrays" , "[message]"
     REQUIRE( (ts.a == 1 && ts.b == 2) );
     REQUIRE( (arr2[0].a == 1 && arr2[0].b == 2) );
     REQUIRE( (arr2[1].a == 3 && arr2[1].b == 4) );
+}
+
+TEST_CASE( "Message correctly handles different underyling type", "[message]" ) {
+    enum class MessageId : uint16_t {
+        KId0,
+        KId1
+    };
+
+    flash::message<MessageId> msg { MessageId::KId1 };
+
+    msg << 1;
+    msg << 2;
+
+    REQUIRE( msg.size() == sizeof(flash::header<MessageId>) + 2 * sizeof(int) );
+}
+
+TEST_CASE( "Tagged message holds data correctly" , "[message]" ) {
+    enum class MessageId : uint32_t {
+        KId0,
+        KId1
+    };
+
+    flash::tagged_message<MessageId> tm { 0, MessageId::KId0 };
+
+    REQUIRE( tm.m_remote == 0 );
+    REQUIRE( tm.m_msg.get_header().m_type == MessageId::KId0 );
+
+    tm.m_msg << 1;
+
+    REQUIRE( tm.m_msg.size() == sizeof(flash::header<MessageId>) + sizeof(int) );
+
+    REQUIRE( tm.m_msg.get_header().m_type == MessageId::KId0 );
+    REQUIRE( tm.m_msg.get_header().m_size == sizeof(int) );
+
+    REQUIRE( tm.m_msg.get_body().size() == sizeof(int) );
+
+    int x;
+    tm.m_msg >> x;
+
+    REQUIRE( x == 1 );
+
+    REQUIRE( tm.m_msg.size() == sizeof(flash::header<MessageId>) );
 }

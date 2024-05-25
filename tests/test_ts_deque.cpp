@@ -4,6 +4,7 @@
 #include <flash/ts_deque.hpp>
 
 #include <iostream>
+#include <thread>
 
 TEST_CASE( "Deque supports correct pushing and popping at back", "[ts_deque]" ) {
     flash::ts_deque<int> deque {};
@@ -88,4 +89,69 @@ TEST_CASE( "Deque supports messages", "[ts_deque]" ) {
     deque.clear();
 
     REQUIRE( deque.size() == 0 );
+}
+
+TEST_CASE( "Deque handles concurrent pushing and popping safely", "[ts_deque]" ) {
+    flash::ts_deque<int> deque {};
+
+    REQUIRE( deque.empty() == true );
+
+    std::thread t1([&] {
+        for (int i = 0; i < 1000; ++i) {
+            int x = i;
+            deque.push_back(std::move(x));
+        }
+    });
+
+    std::thread t2([&] {
+        for (int i = 1000; i < 2000; ++i) {
+            int x = i;
+            deque.push_front(std::move(x));
+        }
+    });
+
+    t1.join();
+    t2.join();
+
+    REQUIRE( deque.size() == 2000 );
+
+    std::thread t3([&] {
+        for (int i = 0; i < 1000; ++i) {
+            deque.pop_back();
+        }
+    });
+
+    std::thread t4([&] {
+        for (int i = 0; i < 1000; ++i) {
+            deque.pop_front();
+        }
+    });
+
+    t3.join();
+    t4.join();
+
+    REQUIRE( deque.size() == 0 );
+}
+
+TEST_CASE( "Deque correctly waits when empty", "[ts_deque]" ) {
+    flash::ts_deque<int> deque {};
+
+    REQUIRE( deque.empty() == true );
+
+    int x { 0 };
+
+    std::thread t1([&] {
+        deque.wait();
+        x = deque.pop_front();
+    });
+
+    std::thread t2([&] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        deque.push_back(1);
+    });
+
+    t1.join();
+    t2.join();
+
+    REQUIRE( x == 1 );
 }
