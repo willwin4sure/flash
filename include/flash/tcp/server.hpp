@@ -40,12 +40,7 @@ public:
     server(uint16_t port) 
         : m_asioAcceptor(m_asioContext, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port)) { }
 
-    /**
-     * Virtual destructor for the server.
-    */
-    virtual ~server() {
-        Stop();
-    }
+    virtual ~server() { }
 
     /**
      * Start the server. It will begin listening for clients on the asio context thread.
@@ -80,19 +75,22 @@ public:
      * Stop the server. Request the context to close, and then wait on the thread to join it.
     */
     void Stop() final {
+        // Request the context to close.
+        boost::asio::post(m_asioContext, [this]() { m_asioContext.stop(); });
+
+        // Close all the sockets.
         for (auto& [id, conn] : m_activeConnections) {
             if (conn && conn->IsConnected()) {
                 conn->Disconnect();
             }
         }
 
-        // Request the context to close.
-        m_asioContext.stop();
-
         // Wait for the context thread to finish.
         if (m_threadContext.joinable()) m_threadContext.join();
 
         std::cout << "[SERVER] Stopped!\n";
+
+        m_asioContext.reset();
     }
 
     /**
@@ -158,12 +156,12 @@ public:
     */
     void Update(size_t maxMessages = -1, bool wait = false) final {
         // Wait until something is deposited into the queue.
-        if (wait) m_qMessagesin.wait();
+        if (wait) m_qMessagesIn.wait();
 
         size_t messageCount = 0;
-        while (messageCount < maxMessages && !m_qMessagesin.empty()) {
+        while (messageCount < maxMessages && !m_qMessagesIn.empty()) {
             // A tagged message has arrived, so we process it.
-            auto taggedMsg = m_qMessagesin.pop_front();
+            auto taggedMsg = m_qMessagesIn.pop_front();
             OnMessage(taggedMsg.m_remote, std::move(taggedMsg.m_msg));
             ++messageCount;
         }
@@ -201,14 +199,16 @@ protected:
     */
     void OnMessage(UserId clientId, message<T>&& msg) override = 0;
 
-    ts_deque<tagged_message<T>> m_qMessagesin;      // Incoming message queue.
+    ts_deque<tagged_message<T>> m_qMessagesIn;      // Incoming message queue.
+
     boost::asio::io_context m_asioContext;          // Shared asio context for the server.
     std::thread m_threadContext;                    // Thread that runs the asio context.
     boost::asio::ip::tcp::acceptor m_asioAcceptor;  // Accepts incoming connections.
+
     UserId m_uidCounter = 100000;                   // Used to assign unique 6-digit IDs to clients.
-    
-    std::unordered_map<UserId,                       
-        std::unique_ptr<connection<T>>> m_activeConnections; // Contains validated connections.
+
+    /// Container for validated connections.    
+    std::unordered_map<UserId, std::unique_ptr<connection<T>>> m_activeConnections;
 
     friend class connection<T>;
 
@@ -229,7 +229,7 @@ private:
                         connection<T>::owner::server,
                         m_asioContext,     // Provide the connection with the surrounding asio context.
                         std::move(socket), // Move the new socket into the connection.
-                        m_qMessagesin      // Reference to the server's incoming message queue.
+                        m_qMessagesIn      // Reference to the server's incoming message queue.
                     );
 
                     // Give the custom server a chance to deny connection by overriding OnClientConnect.

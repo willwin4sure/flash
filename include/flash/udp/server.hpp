@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <sstream>
 #include <unordered_map>
 #include <vector>
 
@@ -25,7 +26,7 @@ namespace udp {
 
 struct User {
     boost::asio::ip::udp::endpoint m_endpoint;
-    std::chrono::steady_clock::time_point m_lastMessage;  // Timestamp of the last message received.
+    std::chrono::steady_clock::time_point m_lastMessageTime;  // Timestamp of the last message received.
 
     bool m_validated { false };       // Whether the user has passed the basic validation handshake.
     uint64_t m_handshake { 0 };       // The input handshake value.
@@ -35,16 +36,16 @@ struct User {
 template <typename T>
 class server : public iserver<T>, protected iserverext<T> {
 public:
-    server(uint16_t port, uint32_t serverTimeout = -1)
+    server(uint16_t port, uint32_t serverTimeout = 5000)
         : m_socket { m_asioContext, boost::asio::ip::udp::endpoint { boost::asio::ip::udp::v4(), port } },
           m_serverTimeout { serverTimeout } {
 
-        m_port = port;
-        m_tempBuffer.resize(MAX_MESSAGE_SIZE_IN_BYTES);
+        m_tempBufferIn.resize(MAX_MESSAGE_SIZE_IN_BYTES);
     }
 
+    virtual ~server() { }
+
     bool Start() final {
-        std::cout << "[SERVER] Starting server...\n";
         if (m_threadContext.joinable() && !m_asioContext.stopped()) {
             std::cout << "[SERVER] Already running!\n";
             return false;
@@ -56,17 +57,23 @@ public:
             m_threadContext = std::thread([this]() { m_asioContext.run(); });
 
         } catch (std::exception& e) {
-            std::cerr << "[SERVER] Start Exception: " << e.what() << "\n";
+            std::stringstream ss;
+            ss << "[SERVER] Exception: " << e.what() << "\n";
+            std::cout << ss.str();
+
             return false;
         }
 
-        std::cout << "[SERVER] Started on port " << m_port << "\n";
+        std::stringstream ss;
+        ss << "[SERVER] Started on port " << m_socket.local_endpoint().port() << "\n";
+        std::cout << ss.str();
+
         return true;
     }
 
     void Stop() final {
-        m_asioContext.stop();
-
+        boost::asio::post(m_asioContext, [this]() { m_asioContext.stop(); });
+        
         if (m_threadContext.joinable()) {
             m_threadContext.join();
         }
@@ -88,7 +95,7 @@ public:
         }
     }
 
-    void Update(size_t maxMessages = -1, bool wait = true) final {
+    void Update(size_t maxMessages = -1, bool wait = false) final {
         if (wait) m_qMessagesIn.wait();
 
         size_t messageCount = 0;
@@ -131,45 +138,37 @@ protected:
     */
     void OnMessage(UserId clientId, message<T>&& msg) override = 0;
 
-    // Port to listen on.
-    uint16_t m_port;
+    ts_deque<tagged_message<T>> m_qMessagesIn;   // Queue of incoming messages.
+    ts_deque<tagged_message<T>> m_qMessagesOut;  // Queue of outgoing messages.
 
-    // The asio context for the server.
-    boost::asio::io_context m_asioContext;
+    boost::asio::io_context m_asioContext;  // The asio context for the server.
+    boost::asio::ip::udp::socket m_socket;  // Socket to listen for incoming messages.
+    std::thread m_threadContext;            // Thread that runs the asio context.
 
-    // Socket to listen for incoming messages.
-    boost::asio::ip::udp::socket m_socket;
+    boost::asio::ip::udp::endpoint m_remoteEndpoint;  // Holds the remote endpoint that last sent a message.
 
-    /// Thread that runs the asio context.
-    std::thread m_threadContext;
+    std::vector<uint8_t> m_tempBufferIn;    // Buffer to store incoming messages.
+    std::vector<uint8_t> m_tempBufferOut;   // Buffer to store outgoing messages.
 
-    // Buffer to store incoming messages.
-    std::vector<uint8_t> m_tempBuffer;
+    uint64_t m_tempHandshakeOut;            // Temporary handshake value for sending.
 
-    // Remote endpoint.
-    boost::asio::ip::udp::endpoint m_remoteEndpoint;
+    UserId m_uidCounter = 100000;  // Used to assign unique 6-digit IDs to clients.
+    uint32_t m_serverTimeout;      // Disconnection timeout for clients in ms.
 
+    /// Maps remote endpoints to user IDs.
     std::unordered_map<boost::asio::ip::udp::endpoint, UserId> m_endpointToUserId;
+    
+    /// Maps user IDs to user data.
     std::unordered_map<UserId, User> m_userIdToUser;
-
-    ts_deque<tagged_message<T>> m_qMessagesIn;
-    ts_deque<tagged_message<T>> m_qMessagesOut;
-
-    uint32_t m_serverTimeout;
-
-    uint64_t m_tempHandshake;
-
-    UserId m_uidCounter = 100000;
 
 private:
     void HandleNewConnection(std::size_t length) {
-        std::cout << "New connection\n";
         // Message is not correct size, ignore.
         if (length != sizeof(uint64_t)) return;
 
         // Read the magic number.
         uint64_t magicNumber;
-        std::memcpy(&magicNumber, m_tempBuffer.data(), sizeof(uint64_t));
+        std::memcpy(&magicNumber, m_tempBufferIn.data(), sizeof(uint64_t));
         magicNumber = boost::endian::big_to_native(magicNumber);
 
         // Magic number does not match, ignore.
@@ -178,19 +177,22 @@ private:
         // Give the custom server a chance to deny connection by overriding OnClientConnect.
         if (OnClientConnect(m_remoteEndpoint.address())) {
             UserId newId = m_uidCounter++;
-            std::chrono::steady_clock::time_point timePt = std::chrono::steady_clock::now();
+            std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 
-            uint64_t handshake = Scramble(uint64_t(timePt.time_since_epoch().count()));
+            // Generate validation data
+            uint64_t handshake = Scramble(uint64_t(now.time_since_epoch().count()));
             uint64_t handshakeCheck = Scramble(handshake);
 
-            std::cout << "Handshake: " << handshake << " Check: " << handshakeCheck << "\n";
-
+            // Assign the user to the endpoint.
             m_endpointToUserId[m_remoteEndpoint] = newId;
-            m_userIdToUser[newId] = User { m_remoteEndpoint, timePt, false, handshake, handshakeCheck };
+            m_userIdToUser[newId] = User { m_remoteEndpoint, now, false, handshake, handshakeCheck };
 
+            // Send the validation handshake.
             SendValidation(newId);
 
-            std::cout << "[" << newId << "] Connection Approved\n";
+            std::stringstream ss;
+            ss << "[" << newId << "] Connection Approved\n";
+            std::cout << ss.str();
 
         } else {
             std::cout << "[------] Connection Denied\n";
@@ -198,24 +200,28 @@ private:
     }
 
     void HandleValidation(UserId userId, std::size_t length) {
-        std::cout << "Validating Client\n";
-
         if (length != sizeof(uint64_t)) {
             // Message is not correct size, kill the user.
-            std::cout << "Invalid message size\n";
+            std::stringstream ss;
+            ss << "[" << userId << "] Client Handshake Failed.\n";
+            std::cout << ss.str();
+
             m_endpointToUserId.erase(m_remoteEndpoint);
             m_userIdToUser.erase(userId);
 
             return;
         }
 
-        uint64_t handshake;
-        std::memcpy(&handshake, m_tempBuffer.data(), sizeof(uint64_t));
-        handshake = boost::endian::big_to_native(handshake);
+        uint64_t handshakeIn;
+        std::memcpy(&handshakeIn, m_tempBufferIn.data(), sizeof(uint64_t));
+        handshakeIn = boost::endian::big_to_native(handshakeIn);
 
-        if (handshake != m_userIdToUser[userId].m_handshakeCheck) {
-            std::cout << "[" << userId << "] Client Handshake Failed.\n";
+        if (handshakeIn != m_userIdToUser[userId].m_handshakeCheck) {
             // Handshake does not match, kill the user.
+            std::stringstream ss;
+            ss << "[" << userId << "] Client Handshake Failed.\n";
+            std::cout << ss.str();
+
             m_endpointToUserId.erase(m_remoteEndpoint);
             m_userIdToUser.erase(userId);
 
@@ -223,40 +229,41 @@ private:
         }
 
         m_userIdToUser[userId].m_validated = true;
-        m_userIdToUser[userId].m_lastMessage = std::chrono::steady_clock::now();
-        std::cout << "[" << userId << "] Client Validated.\n";
+        m_userIdToUser[userId].m_lastMessageTime = std::chrono::steady_clock::now();
+
+        std::stringstream ss;
+        ss << "[" << userId << "] Client Validated.\n";
+        std::cout << ss.str();
 
         OnClientValidate(userId);
     }
 
     void ProcessMessage(UserId userId, std::size_t length) {
-        std::cout << "processing message\n";
-        
         // Message is too short to be in the canonical format, ignore
         if (length < sizeof(header<T>)) return;
 
         message<T> msg { static_cast<T>(0) };
-        std::memcpy(&msg.get_header(), m_tempBuffer.data(), sizeof(header<T>));
+        std::memcpy(&msg.get_header(), m_tempBufferIn.data(), sizeof(header<T>));
+        msg.get_header().m_size = boost::endian::big_to_native(msg.get_header().m_size);
 
         // Size of message body does not match the size in the header, ignore
         if (length - sizeof(header<T>) != msg.get_header().m_size) return;
 
         msg.get_body().resize(msg.get_header().m_size);
-        std::memcpy(msg.get_body().data(), m_tempBuffer.data() + sizeof(header<T>), msg.get_header().m_size);
+        std::memcpy(msg.get_body().data(), m_tempBufferIn.data() + sizeof(header<T>), msg.get_header().m_size);
 
-        m_userIdToUser[userId].m_lastMessage = std::chrono::steady_clock::now();
-        OnMessage(userId, std::move(msg));
+        m_userIdToUser[userId].m_lastMessageTime = std::chrono::steady_clock::now();
+
+        // Push the message to the incoming queue.
+        m_qMessagesIn.push_back(tagged_message<T> { userId, std::move(msg) });
     }
     
     void WaitForMessages() {
-        std::cout << "Waiting for messages\n";
-        std::fill(m_tempBuffer.begin(), m_tempBuffer.end(), 0);        
         m_socket.async_receive_from(
-            boost::asio::buffer(m_tempBuffer.data(), m_tempBuffer.size()), m_remoteEndpoint,
+            boost::asio::buffer(m_tempBufferIn.data(), m_tempBufferIn.size()), m_remoteEndpoint,
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     CleanupUsers();
-                    std::cout << "Message received\n";
 
                     // Handles the case that the endpoint is new
                     if (m_endpointToUserId.find(m_remoteEndpoint) == m_endpointToUserId.end()) {
@@ -280,7 +287,9 @@ private:
                     ProcessMessage(userId, length);
 
                 } else {
-                    std::cerr << "[SERVER] Error on receive: " << ec.message() << "\n";
+                    std::stringstream ss;
+                    ss << "[SERVER] Error receiving message: " << ec.message() << "\n";
+                    std::cout << ss.str();
                 }
 
                 WaitForMessages();
@@ -303,6 +312,7 @@ private:
 
             [this, userId, msg = std::move(msg)] () mutable {
                 bool writing = !m_qMessagesOut.empty();
+                msg.get_header().m_size = boost::endian::native_to_big(msg.get_header().m_size);
                 m_qMessagesOut.push_back({ userId, std::move(msg) });
 
                 if (!writing) {
@@ -313,13 +323,15 @@ private:
     }
 
     void SendValidation(UserId userId) {
-        m_tempHandshake = boost::endian::native_to_big(m_userIdToUser[userId].m_handshake);
+        m_tempHandshakeOut = boost::endian::native_to_big(m_userIdToUser[userId].m_handshake);
 
         m_socket.async_send_to(
-            boost::asio::buffer(&m_tempHandshake, sizeof(uint64_t)), m_userIdToUser[userId].m_endpoint,
+            boost::asio::buffer(&m_tempHandshakeOut, sizeof(uint64_t)), m_userIdToUser[userId].m_endpoint,
             [this](std::error_code ec, std::size_t length) {
                 if (ec) {
-                    std::cerr << "[SERVER] Error sending validation: " << ec.message() << "\n";
+                    std::stringstream ss;
+                    ss << "[SERVER] Error sending validation: " << ec.message() << "\n";
+                    std::cout << ss.str();
                 }
             }
         );
@@ -340,14 +352,13 @@ private:
         UserId userId = taggedMsg.m_remote;
         message<T>& msg = taggedMsg.m_msg;
 
-        std::vector<uint8_t> buffer;
-        buffer.resize(msg.size() + sizeof(header<T>));
+        m_tempBufferOut.resize(msg.size());
 
-        std::memcpy(buffer.data(), &msg.get_header(), sizeof(header<T>));
-        std::memcpy(buffer.data() + sizeof(header<T>), msg.get_body().data(), msg.get_body().size());
+        std::memcpy(m_tempBufferOut.data(), &msg.get_header(), sizeof(header<T>));
+        std::memcpy(m_tempBufferOut.data() + sizeof(header<T>), msg.get_body().data(), msg.get_body().size());
 
         m_socket.async_send_to(
-            boost::asio::buffer(buffer.data(), buffer.size()), m_userIdToUser[userId].m_endpoint,
+            boost::asio::buffer(m_tempBufferOut.data(), m_tempBufferOut.size()), m_userIdToUser[userId].m_endpoint,
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     m_qMessagesOut.pop_front();
@@ -357,7 +368,9 @@ private:
                     }
 
                 } else {
-                    std::cerr << "[SERVER] Error sending message: " << ec.message() << "\n";
+                    std::stringstream ss;
+                    ss << "[SERVER] Error sending message: " << ec.message() << "\n";
+                    std::cout << ss.str();
                 }
             }
         );
@@ -369,13 +382,16 @@ private:
         std::vector<UserId> disconnectedUsers;
 
         for (auto it = m_userIdToUser.begin(); it != m_userIdToUser.end(); ++it) {
-            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second.m_lastMessage).count() > m_serverTimeout) {
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second.m_lastMessageTime).count() > m_serverTimeout) {
                 disconnectedUsers.push_back(it->first);
             }
         }
 
         for (auto userId : disconnectedUsers) {
-            std::cout << "[" << userId << "] Client Timed Out.\n";
+            std::stringstream ss;
+            ss << "[" << userId << "] Client Timed Out.\n";
+            std::cout << ss.str();
+
             m_endpointToUserId.erase(m_userIdToUser[userId].m_endpoint);
             m_userIdToUser.erase(userId);
         }

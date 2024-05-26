@@ -71,13 +71,9 @@ public:
     }
 
     /**
-     * Virtual destructor for the connection; disconnects if necessary.
+     * Virtual destructor for the connection.
     */
-    virtual ~connection() {
-        if (IsConnected()) {
-            Disconnect();
-        }
-    }
+    virtual ~connection() { }
 
     /**
      * @returns The ID of the remote side of the connection.
@@ -176,6 +172,7 @@ public:
 
             [this, msg = std::move(msg)] () mutable {
                 bool writing = !m_qMessagesOut.empty();
+                msg.get_header().m_size = boost::endian::native_to_big(msg.get_header().m_size);
                 m_qMessagesOut.push_back(std::move(msg));
 
                 // If writing is already occurring, no need to start the loop again.
@@ -287,6 +284,8 @@ private:
             m_socket, boost::asio::buffer(&m_msgTemporaryIn.get_header(), sizeof(header<T>)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
+                    m_msgTemporaryIn.get_header().m_size = boost::endian::big_to_native(m_msgTemporaryIn.get_header().m_size);
+
                     // Resize the temporary body to the right size. Crucial if the
                     // body is empty now and you need to clear the old temporary!
                     m_msgTemporaryIn.get_body().resize(m_msgTemporaryIn.get_header().m_size);

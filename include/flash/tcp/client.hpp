@@ -34,18 +34,8 @@ namespace tcp {
 template <typename T>
 class client : public iclient<T> {
 public:
-
-    /**
-     * Default constructor for the client.
-    */
     client() = default;
-
-    /**
-     * Virtual destructor for the client; disconnects the client from the server.
-    */
-    virtual ~client() {
-        Disconnect();
-    }
+    virtual ~client() { }
 
     /**
      * Connects the client to the server at the given host and port.
@@ -91,16 +81,19 @@ public:
      * also releases the unique pointer to the connection.
     */
     void Disconnect() final {
+        boost::asio::post(m_asioContext, [this]() { m_asioContext.stop(); });
+
         if (IsConnected()) {
             m_connection->Disconnect();
         }
 
-        m_asioContext.stop();
         if (m_threadContext.joinable()) {
             m_threadContext.join();
         }
 
         m_connection.release();
+
+        std::cout << "Client Disconnected.\n";
     }
 
     /**

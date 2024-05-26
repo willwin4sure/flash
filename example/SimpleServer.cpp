@@ -1,15 +1,14 @@
 #include <flash/message.hpp>
 #include <flash/ts_deque.hpp>
 
-#include <flash/tcp/client.hpp>
-#include <flash/tcp/server.hpp>
+#include <flash/udp/client.hpp>
+#include <flash/udp/server.hpp>
 
 #include "CustomMsgTypes.hpp"
 
-
-class CustomServer : public flash::tcp::server<CustomMsgTypes> {
+class CustomServer : public flash::udp::server<CustomMsgTypes> {
 public:
-    CustomServer(uint16_t port) : flash::tcp::server<CustomMsgTypes>(port) {
+    CustomServer(uint16_t port) : flash::udp::server<CustomMsgTypes>(port) {
         
     }
 
@@ -51,6 +50,11 @@ int main() {
 
     while (true) {
         server.Update();
+
+        if (GetKeyState('Q') & 0x8000) {
+            server.Stop();
+            break;
+        }
     }
 
     return 0;

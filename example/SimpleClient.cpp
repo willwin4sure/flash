@@ -1,13 +1,13 @@
 #include <flash/message.hpp>
 #include <flash/ts_deque.hpp>
 
-#include <flash/tcp/client.hpp>
-#include <flash/tcp/server.hpp>
+#include <flash/udp/client.hpp>
+#include <flash/udp/server.hpp>
 
 #include "CustomMsgTypes.hpp"
 
 
-class CustomClient : public flash::tcp::client<CustomMsgTypes> {
+class CustomClient : public flash::udp::client<CustomMsgTypes> {
 public:
     void PingServer() {
         flash::message<CustomMsgTypes> msg { CustomMsgTypes::ServerPing };
@@ -87,6 +87,8 @@ int main(int argc, char** argv) {
             quit = true;
         }
     }
+
+    c.Disconnect();
 
     return 0;
 }
