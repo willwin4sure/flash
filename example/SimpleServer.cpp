@@ -1,15 +1,15 @@
 #include <flash/message.hpp>
 #include <flash/ts_deque.hpp>
 
-#include <flash/udp/client.hpp>
-#include <flash/udp/server.hpp>
+#include <flash/tcp/client.hpp>
+#include <flash/tcp/server.hpp>
 
 #include "CustomMsgTypes.hpp"
 
 
-class CustomServer : public flash::udp::server<CustomMsgTypes> {
+class CustomServer : public flash::tcp::server<CustomMsgTypes> {
 public:
-    CustomServer(uint16_t port) : flash::udp::server<CustomMsgTypes>(port) {
+    CustomServer(uint16_t port) : flash::tcp::server<CustomMsgTypes>(port) {
         
     }
 

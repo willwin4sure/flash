@@ -21,6 +21,7 @@
 
 #include <chrono>
 #include <memory>
+#include <sstream>
 
 namespace flash {
 
@@ -36,7 +37,7 @@ template <typename T>
 class connection {
 public:
     /**
-     * The type of the connection owner. Behavior is slightly different depending on the owner.
+     * The type of the connection owner. Behavior is different depending on the owner.
     */
     enum class owner : uint8_t {
         server,
@@ -51,25 +52,38 @@ public:
      * @param socket      the socket that the connection will use.
      * @param qMessagesIn a reference to the queue to deposit incoming messages into.
     */
-    connection(owner ownerType, boost::asio::io_context& asioContext, boost::asio::ip::tcp::socket&& socket, ts_deque<tagged_message<T>>& qMessagesIn)
-        : m_ownerType { ownerType }, m_asioContext { asioContext }, m_socket { std::move(socket) }, m_qMessagesIn { qMessagesIn } {
+    connection(owner ownerType,
+               boost::asio::io_context& asioContext,
+               boost::asio::ip::tcp::socket&& socket,
+               ts_deque<tagged_message<T>>& qMessagesIn)
+               
+        : m_ownerType { ownerType }, m_asioContext { asioContext },
+          m_socket { std::move(socket) }, m_qMessagesIn { qMessagesIn } {
 
         if (m_ownerType == owner::server) {
             // Server needs to generate random data for client to validate on.
-            m_handshakeOut = Scramble(uint64_t(std::chrono::steady_clock::now().time_since_epoch().count()));
+            m_handshakeOut = Scramble(
+                uint64_t(std::chrono::steady_clock::now().time_since_epoch().count()));
 
             // What the client should return to us during the handshake.
             m_handshakeCheck = Scramble(m_handshakeOut);
         }
     }
 
-    virtual ~connection() { }
+    /**
+     * Virtual destructor for the connection; disconnects if necessary.
+    */
+    virtual ~connection() {
+        if (IsConnected()) {
+            Disconnect();
+        }
+    }
 
     /**
-     * @returns The ID of the other side of the connection.
+     * @returns The ID of the remote side of the connection.
      * 
-     * This should be 0 if the owner is a client (since it is a connection to the server),
-     * or the ID of the client is the owner is a server (since it is the connection to some client).
+     * This should be 0 if the owner is a client (remote is the server),
+     * or the ID of the client is the owner is a server (remote is some client).
     */
     UserId GetId() const { return m_id; }
 
@@ -85,6 +99,7 @@ public:
      * 
      * In order for this to do any work, the socket that we got
      * from the connecting client must be placed in this object and open.
+     * This is so that we can talk back at the client.
      * 
      * @param uid the ID of the client to connect to.
     */
@@ -107,7 +122,7 @@ public:
      * Triggers this connection to start doing work by connecting it to the server,
      * and prompting it to continuously read header messages from the socket.
      * 
-     * @param endpoints the results of a resolver operation that will be used to connect to the server.
+     * @param endpoints the results of a resolver operation used to connect to the server.
     */
     void ConnectToServer(const boost::asio::ip::tcp::resolver::results_type& endpoints) {
         // Only the client should connect to servers.
@@ -123,7 +138,9 @@ public:
                     ReadValidation();
 
                 } else {
-                    std::cout << "Connect to server failed: " << ec.message() << '\n';
+                    std::stringstream ss;
+                    ss << "Connect to server failed: " << ec.message() << "\n";
+                    std::cout << ss.str();
                 }
             }
         );
@@ -170,36 +187,30 @@ public:
     }
 
 protected:
-    /// Type of the connection owner.
-    owner m_ownerType { owner::server };
+    owner m_ownerType { owner::server };     // Identifies the owner of the connection.
+    UserId m_id { INVALID_USER_ID };         // Identifies the remote side of connection.
 
-    /// Identifier of the remote side of the connection.
-    UserId m_id { INVALID_USER_ID };
+    boost::asio::io_context& m_asioContext;  // Shared asio context among connections.
+    boost::asio::ip::tcp::socket m_socket;   // Unique socket connected to remote, owned.
 
-    /// Each connection has a unique socket that is connected to a remote; we own it.
-    boost::asio::ip::tcp::socket m_socket;
+    ts_deque<message<T>> m_qMessagesOut;     // Queue of messages to send, owned.
 
-    /// The asio context is shared with all other connections.
-    boost::asio::io_context& m_asioContext;
+    message<T> m_msgTemporaryIn { static_cast<T>(0) };  // Holds incoming message data.
 
-    /// Queue holding messages to be sent to the remote; we own it.
-    ts_deque<message<T>> m_qMessagesOut;
-
-    /// Queue holding messages received from the remote side, owned by the client or server.
+    /// Queue holding messages received from the remote side, owned by the caller.
     /// This design choice is so that all incoming messages are serialized; this is also
     /// why we have to tag the messages with the connection they came from.
-    ts_deque<tagged_message<T>>& m_qMessagesIn;
+    ts_deque<tagged_message<T>>& m_qMessagesIn;  
 
-    /// Temporary message to hold incoming message data, initialized with empty body and header type 0.
-    message<T> m_msgTemporaryIn { static_cast<T>(0) };
-
-    uint64_t m_handshakeOut { 0 };
-    uint64_t m_handshakeIn { 0 };
-    uint64_t m_handshakeCheck { 0 };
+    uint64_t m_handshakeOut { 0 };    // Outgoing handshake data (challenge or response)
+    uint64_t m_handshakeIn { 0 };     // Incoming handshake data (challenge or response)
+    uint64_t m_handshakeCheck { 0 };  // Correct handshake response
 
 private:
     /**
-     * Asynchronous task for the asio context, reading a validation challenge or response.
+     * Asynchronous task for the asio context.
+     * 
+     * Reads a validation challenge or response.
     */
     void ReadValidation(iserverext<T>* server = nullptr) {
         boost::asio::async_read(
@@ -209,21 +220,27 @@ private:
                     m_handshakeIn = boost::endian::big_to_native(m_handshakeIn);
 
                     if (m_ownerType == owner::server) {
-                        // Server has received the validation data, should check it and then wait for messages.
+                        // Server has received the validation data.
+                        // Check it against the expected value.
                         if (m_handshakeIn == m_handshakeCheck) {
-                            std::cout << "[" << m_id << "] Client Validated.\n";
+                            std::stringstream ss;
+                            ss << "[" << m_id << "] Client Validated.\n";
+                            std::cout << ss.str();
 
                             if (server) server->OnClientValidate(m_id);
 
                             ReadHeader();
                             
                         } else {
-                            std::cout << "[" << m_id << "] Client Disconnected (Failed Validation).\n";
+                            std::stringstream ss;
+                            ss << "[" << m_id << "] Client Failed Validation.\n";
+                            std::cout << ss.str();
+
                             m_socket.close();
                         }
 
                     } else {
-                        // Client has received the validation data, should send the response.
+                        // Client has received the validation data, send response.
                         m_handshakeOut = Scramble(m_handshakeIn);
                         WriteValidation();
                     }
@@ -236,7 +253,9 @@ private:
     }
 
     /**
-     * Asynchronous task for the asio context, writing a validation challenge or response.
+     * Asynchronous task for the asio context.
+     * 
+     * Writes a validation challenge or response.
     */
     void WriteValidation() {
         uint64_t handshakeOut = boost::endian::native_to_big(m_handshakeOut);
@@ -246,7 +265,7 @@ private:
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     if (m_ownerType == owner::client) {
-                        // We have sent the validation data, should just wait for messages (or closure)
+                        // Sent the validation data, just wait for messages (or closure)
                         ReadHeader();
                     }
 
@@ -258,7 +277,9 @@ private:
     }
 
     /**
-     * Asynchronous task for the asio context, waiting to read a message header of appropriate size.
+     * Asynchronous task for the asio context.
+     * 
+     * Reads a message header of appropriate size.
     */
     void ReadHeader() {
         // Tell asio to wait for the header to fill the buffer and then run a callback.
@@ -266,8 +287,8 @@ private:
             m_socket, boost::asio::buffer(&m_msgTemporaryIn.get_header(), sizeof(header<T>)),
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
-                    // Resize the temporary body to the right size. Crucial if the body is empty now
-                    // and you need to clear the old temporary!
+                    // Resize the temporary body to the right size. Crucial if the
+                    // body is empty now and you need to clear the old temporary!
                     m_msgTemporaryIn.get_body().resize(m_msgTemporaryIn.get_header().m_size);
 
                     if (m_msgTemporaryIn.get_header().m_size > 0) {
@@ -280,7 +301,10 @@ private:
                     }
 
                 } else {
-                    std::cout << "[" << m_id << "] Read Header Fail: " << ec.message() << '\n';
+                    std::stringstream ss;
+                    ss << "[" << m_id << "] Read Header Fail: " << ec.message() << '\n';
+                    std::cout << ss.str();
+                    
                     m_socket.close();
                 }
             }
@@ -288,7 +312,9 @@ private:
     }
 
     /**
-     * Asynchronous task for the asio context, waiting to read a message body.
+     * Asynchronous task for the asio context.
+     * 
+     * Reads a message body.
     */
     void ReadBody() {
         // Tell asio to wait for the body to fill the buffer and then run a callback.
@@ -300,7 +326,10 @@ private:
                     AddToIncomingMessageQueue();
 
                 } else {
-                    std::cout << "[" << m_id << "] Read Body Fail: " << ec.message() << '\n';
+                    std::stringstream ss;
+                    ss << "[" << m_id << "] Read Body Fail: " << ec.message() << '\n';
+                    std::cout << ss.str();
+                    
                     m_socket.close();
                 }
             }
@@ -308,7 +337,9 @@ private:
     }
 
     /**
-     * Asynchronous task for the asio context to write a message header.
+     * Asynchronous task for the asio context.
+     * 
+     * Writes a message header.
     */
     void WriteHeader() {
         // Tell asio to wait for the header to be written and then run a callback.
@@ -331,7 +362,10 @@ private:
                     }
 
                 } else {
-                    std::cout << "[" << m_id << "] Write Header Fail: " << ec.message() << '\n';
+                    std::stringstream ss;
+                    ss << "[" << m_id << "] Write Header Fail: " << ec.message() << '\n';
+                    std::cout << ss.str();
+
                     m_socket.close();
                 }
             }
@@ -339,12 +373,16 @@ private:
     }
 
     /**
-     * Asynchronous task for the asio context to write a message body.
+     * Asynchronous task for the asio context.
+     * 
+     * Writes a message body.
     */
     void WriteBody() {
         // Tell asio to wait for the body to be written and then run a callback.
         boost::asio::async_write(
-            m_socket, boost::asio::buffer(m_qMessagesOut.front().get_body().data(), m_qMessagesOut.front().get_body().size()),
+            m_socket, boost::asio::buffer(m_qMessagesOut.front().get_body().data(),
+                                          m_qMessagesOut.front().get_body().size()),
+
             [this](std::error_code ec, std::size_t length) {
                 if (!ec) {
                     // The header and body have both be written, so remove from the queue.
@@ -356,7 +394,10 @@ private:
                     }
 
                 } else {
-                    std::cout << "[" << m_id << "] Write Body Fail: " << ec.message() << '\n';
+                    std::stringstream ss;
+                    ss << "[" << m_id << "] Write Body Fail: " << ec.message() << '\n';
+                    std::cout << ss.str();
+                    
                     m_socket.close();
                 }
             }
@@ -364,7 +405,9 @@ private:
     }
 
     /**
-     * Asynchronous task for the asio context to add a message to the incoming message queue.
+     * Asynchronous task for the asio context.
+     * 
+     * Adds a message to the incoming message queue.
     */
     void AddToIncomingMessageQueue() {
         m_qMessagesIn.push_back(tagged_message<T>{ GetId(), std::move(m_msgTemporaryIn) });

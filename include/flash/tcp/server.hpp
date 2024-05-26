@@ -41,7 +41,7 @@ public:
         : m_asioAcceptor(m_asioContext, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port)) { }
 
     /**
-     * Virtual destructor for the server. Stops the server if it is still running.
+     * Virtual destructor for the server.
     */
     virtual ~server() {
         Stop();
@@ -80,6 +80,12 @@ public:
      * Stop the server. Request the context to close, and then wait on the thread to join it.
     */
     void Stop() final {
+        for (auto& [id, conn] : m_activeConnections) {
+            if (conn && conn->IsConnected()) {
+                conn->Disconnect();
+            }
+        }
+
         // Request the context to close.
         m_asioContext.stop();
 
@@ -87,8 +93,6 @@ public:
         if (m_threadContext.joinable()) m_threadContext.join();
 
         std::cout << "[SERVER] Stopped!\n";
-
-        m_asioContext.reset();  // In case you want to reuse this Server object.
     }
 
     /**
@@ -100,16 +104,16 @@ public:
      * as we don't receive an explicit notification of such a fact.
     */
     void MessageClient(UserId clientId, message<T>&& msg) final {
-        // Find the client in the active connections.
-        auto client = m_activeConnections.find(clientId);
+        // Find the client connection in the active connections.
+        auto conn = m_activeConnections.find(clientId);
         
         // If the client is found and connected, send a message
-        if (client != m_activeConnections.end() && client->second && client->second->IsConnected()) {
-            client->second->Send(std::move(msg));
+        if (conn != m_activeConnections.end() && conn->second && conn->second->IsConnected()) {
+            conn->second->Send(std::move(msg));
 
         } else {
             // If the client socket is no longer valid, assume that the client has disconnected.
-            m_activeConnections.erase(client);
+            m_activeConnections.erase(conn);
             OnClientDisconnect(clientId);
         }
     }
@@ -122,12 +126,12 @@ public:
     void MessageAllClients(message<T>&& msg, UserId ignoreClient = INVALID_USER_ID) final {
         std::vector<UserId> disconnectedClients;
 
-        for (auto& [id, client] : m_activeConnections) {
+        for (auto& [id, conn] : m_activeConnections) {
             if (id == ignoreClient) continue;
 
-            if (client && client->IsConnected()) {
+            if (conn && conn->IsConnected()) {
                 message<T> msgCopy = msg;
-                client->Send(std::move(msgCopy));
+                conn->Send(std::move(msgCopy));
 
             } else {
                 // If the client socket is no longer valid, assume that the client has disconnected.
@@ -197,24 +201,14 @@ protected:
     */
     void OnMessage(UserId clientId, message<T>&& msg) override = 0;
 
-    /// Thread-safe deque for incoming message packets; we own it.
-    ts_deque<tagged_message<T>> m_qMessagesin;
-
-    /// Container of active validated connections.
-    std::unordered_map<UserId, std::unique_ptr<connection<T>>> m_activeConnections;
-
-    /// The asio context for the server.
-    boost::asio::io_context m_asioContext;
-
-    /// Thread that runs the asio context.
-    std::thread m_threadContext; 
-
-    /// Acceptor object that waits for incoming connection requests.
-    boost::asio::ip::tcp::acceptor m_asioAcceptor;
-
-    /// Clients are identified via a numeric ID, which is must simpler.
-    /// Six digits for pretty printing with "SERVER".
-    UserId m_uidCounter = 100000;
+    ts_deque<tagged_message<T>> m_qMessagesin;      // Incoming message queue.
+    boost::asio::io_context m_asioContext;          // Shared asio context for the server.
+    std::thread m_threadContext;                    // Thread that runs the asio context.
+    boost::asio::ip::tcp::acceptor m_asioAcceptor;  // Accepts incoming connections.
+    UserId m_uidCounter = 100000;                   // Used to assign unique 6-digit IDs to clients.
+    
+    std::unordered_map<UserId,                       
+        std::unique_ptr<connection<T>>> m_activeConnections; // Contains validated connections.
 
     friend class connection<T>;
 

@@ -40,7 +40,7 @@ public:
           m_serverTimeout { serverTimeout } {
 
         m_port = port;
-        m_tempBuffer.resize(MAX_MESSAGE_SIZE);
+        m_tempBuffer.resize(MAX_MESSAGE_SIZE_IN_BYTES);
     }
 
     bool Start() final {
@@ -173,7 +173,7 @@ private:
         magicNumber = boost::endian::big_to_native(magicNumber);
 
         // Magic number does not match, ignore.
-        if (magicNumber != CONNECTION_REQUEST_MAGIC_NUM) return;
+        if (magicNumber != CONNECTION_REQUEST_MAGIC_NUMBER) return;
 
         // Give the custom server a chance to deny connection by overriding OnClientConnect.
         if (OnClientConnect(m_remoteEndpoint.address())) {
@@ -290,7 +290,7 @@ private:
 
     void Send(UserId userId, message<T>&& msg) {
         // Message is too long, reject.
-        if (msg.size() > MAX_MESSAGE_SIZE) {
+        if (msg.size() > MAX_MESSAGE_SIZE_IN_BYTES) {
             assert(false);
             return;
         }

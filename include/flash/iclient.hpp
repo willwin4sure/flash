@@ -11,7 +11,8 @@
 namespace flash {
 
 /**
- * Client interface that allows you to send message and access a thread-safe queue of incoming messages.
+ * Client interface that allows you to send messages
+ * and access a thread-safe queue of incoming messages.
  * 
  * @tparam T an enum class containing possible types of messages to be sent.
  *         Should have an underlying type of uint32_t.

@@ -62,7 +62,8 @@ public:
         try {
             // Resolve the host name and port number into a list of endpoints to try.
             boost::asio::ip::udp::resolver resolver(m_asioContext);
-            boost::asio::ip::udp::resolver::results_type endpoints = resolver.resolve(host, std::to_string(port));
+            boost::asio::ip::udp::resolver::results_type endpoints
+                = resolver.resolve(host, std::to_string(port));
 
             m_socket = boost::asio::ip::udp::socket(m_asioContext);
 
@@ -161,7 +162,7 @@ private:
         std::cout << "Sending connection request...\n";
 
         // Send the magic number
-        uint64_t magicNumber = boost::endian::native_to_big(CONNECTION_REQUEST_MAGIC_NUM);
+        uint64_t magicNumber = boost::endian::native_to_big(CONNECTION_REQUEST_MAGIC_NUMBER);
         m_socket.async_send(boost::asio::buffer(&magicNumber, sizeof(uint64_t)),
             [this](std::error_code ec, std::size_t length) {
             if (!ec) {

@@ -17,7 +17,7 @@
 
 namespace flash {
 
-/// Type of the user ID. Server ID is 0, Client IDs are positive integers, e.g. starting at 100000.
+/// Server ID is 0. Client IDs are positive integers, e.g. starting at 100000.
 using UserId = int32_t;
 
 constexpr UserId INVALID_USER_ID = -1;  // Represents some unassigned user ID.
@@ -132,6 +132,9 @@ struct message {
      * @tparam U the type of the data being popped.
      * 
      * @warning Doesn't handle endianness, so may not work across different architectures.
+     * If you care about this, then serialize the data yourself before pushing it;
+     * one option is to just use string representations of the data. Or just only
+     * use data with byte-sized types.
     */
     template <typename U>
     friend message<T>& operator>>(message<T>& msg, U& data) {
@@ -177,7 +180,7 @@ struct tagged_message {
         return os;
     }
 
-    UserId m_remote { INVALID_USER_ID };  // ID of the remote user.
+    UserId m_remote;  // ID of the remote user.
     message<T> m_msg;
 };
 

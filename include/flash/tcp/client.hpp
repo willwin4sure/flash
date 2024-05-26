@@ -59,7 +59,8 @@ public:
         try {
             // Resolve the host name and port number into a list of endpoints to try.
             boost::asio::ip::tcp::resolver resolver { m_asioContext };
-            boost::asio::ip::tcp::resolver::results_type endpoints = resolver.resolve(host, std::to_string(port));
+            boost::asio::ip::tcp::resolver::results_type endpoints
+                = resolver.resolve(host, std::to_string(port));
 
             // Create a client connection with a new socket.
             m_connection = std::make_unique<connection<T>>(
@@ -128,18 +129,12 @@ public:
     }
 
 protected:
-    /// The asio context for the client connection.
-    boost::asio::io_context m_asioContext;
-
-    /// Thread for the context to execute its work commands independently.
-    std::thread m_threadContext;
-
-    /// The single instance of a connection object, which handles data transfer.
-    std::unique_ptr<connection<T>> m_connection;
+    boost::asio::io_context m_asioContext;        // The asio context for the client connection.
+    std::thread m_threadContext;                  // Thread that runs the asio context.
+    std::unique_ptr<connection<T>> m_connection;  // Handles data transfer.
 
 private:
-    /// The thread-safe queue of messages from the server.
-    ts_deque<tagged_message<T>> m_qMessagesIn;
+    ts_deque<tagged_message<T>> m_qMessagesIn;  // Thread-safe queue of incoming messages.
 };
 
 } // namespace tcp

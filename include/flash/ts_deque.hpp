@@ -81,8 +81,9 @@ public:
      * 
      * @note javidx9's version of the code passed in a const reference to T
      * and then tried to std::move it into the back of the deque.
-     * But this is wrong since it just makes a copy instead, as it is a reference to a const:
+     * This is wrong since it just makes a copy instead, as it is a reference to a const:
      * https://stackoverflow.com/questions/28595117/why-can-we-use-stdmove-on-a-const-object.
+     * 
      * I have edited the code to take in an r-value reference instead,
      * and the move constructor gets called now. This allows you to still pass
      * in both r-values and moved l-values.
@@ -148,11 +149,11 @@ public:
     }
 
 protected:
-    std::deque<T> m_deque;  // Underlying double-ended queue holding data.
+    std::deque<T> m_deque;            // Underlying double-ended queue holding data.
+    mutable std::mutex m_mutexDeque;  // Lock around the deque.
 
-    mutable std::mutex m_mutexDeque;               // Lock around the deque.
-    mutable std::mutex m_mutexBlocking;            // Lock around the blocking condition variable.
     mutable std::condition_variable m_cvBlocking;  // Blocking condition variable to wait for non-empty.
+    mutable std::mutex m_mutexBlocking;            // Lock around the blocking condition variable.
 };
 
 } // namespace flash
