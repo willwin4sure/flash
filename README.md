@@ -71,6 +71,9 @@ I would recommend adding the path to your Boost library
 to the CMake configuration settings. You can find this by
 clicking the cog wheel icon in the CMake extension side bar.
 
+Then, add an entry with item `BOOST_ROOT` and value
+`/absolute/path/to/boost`, e.g. `C:\boost_1_84_0`.
+
 ## How to Build
 
 One option is to run the following sequence of commands:
