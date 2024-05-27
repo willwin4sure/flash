@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
     std::string serverIpAddress = argv[2];
 
     CustomClient c;
-    c.Connect(serverIpAddress, 60000);
+    c.Connect(serverIpAddress, 38766);
 
     bool quit = false;
     while (!quit) {
