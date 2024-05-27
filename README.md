@@ -52,14 +52,22 @@ of serialization or reliability to the application-level user,
 allowing greater flexibility when using UDP.
 For example, the user may want to implement
 sequence numbers or message acknowledgement/retransmission
-for important messages.
+for important messages. Even the initial connection is
+not guaranteed, and may need to be re-tried if it doesn't
+succeed.
+
+Since the connections are assumed to be disconnected
+after a few seconds of no received messages,
+you may also want to implement some sort of heartbeat
+protocol if there aren't constant transmissions
+in normal use.
 
 ## How to Develop
 
 You need C++, CMake, and [Boost](https://www.boost.org/).
 
 If you are on a VSCode environment with the CMake extension,
-I would recommend adding the path to your Boost library path
+I would recommend adding the path to your Boost library
 to the CMake configuration settings. You can find this by
 clicking the cog wheel icon in the CMake extension side bar.
 
