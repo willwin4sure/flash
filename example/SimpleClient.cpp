@@ -26,15 +26,16 @@ public:
 };
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <client_num>\n";
+    if (argc != 3) {
+        std::cerr << "Usage: " << argv[0] << " <client_num> <server_ip_address>\n";
         return 1;
     }
 
     int clientNum = std::stoi(argv[1]);
+    std::string serverIpAddress = argv[2];
 
     CustomClient c;
-    c.Connect("127.0.0.1", 60000);
+    c.Connect(serverIpAddress, 60000);
 
     bool quit = false;
     while (!quit) {
