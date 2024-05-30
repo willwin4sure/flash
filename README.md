@@ -36,7 +36,7 @@ messages.
 ## Features
 
 Flash has a TCP implementation based on `javidx9`'s code,
-with various modificaitons. This can be used when reliability
+with various modifications. This can be used when reliability
 of messages is vital or when real-time performance is not
 a priority. This code is found under `flash/tcp`,
 and all relevant classes are in the `flash::tcp` namespace.
